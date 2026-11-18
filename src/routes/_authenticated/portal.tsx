@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Breadcrumbs, Section, SectionHead, SpecTable } from "@/components/site/parts";
 import { company } from "@/data/company";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +62,13 @@ function PortalPage() {
   const [tab, setTab] = useState<"rfqs" | "orders" | "certificates" | "profile">("rfqs");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("trishul-just-signed-in") === "true") {
+      sessionStorage.removeItem("trishul-just-signed-in");
+      setNotice("✓ Profile created successfully on Trishul Metals & Alloys! You are now signed in to your customer dashboard.");
+    }
+  }, []);
 
   const profile = data.profile;
   const rfqs = data.rfqs;

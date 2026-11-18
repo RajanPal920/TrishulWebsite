@@ -327,75 +327,13 @@ function AuthPage() {
     setError(null);
     setNotice(null);
 
-    const isLovableHost =
-      typeof window !== "undefined" &&
-      (window.location.hostname.endsWith(".lovable.app") || window.location.hostname === "lovable.app");
-
-    const hasCustomGoogleClientId =
-      Boolean(import.meta.env["VITE_GOOGLE_CLIENT_ID"]) &&
-      import.meta.env["VITE_GOOGLE_CLIENT_ID"] !== DEFAULT_LOVABLE_CLIENT_ID;
-
-    // If using default Lovable Client ID on any non-Lovable domain (Vercel, localhost, custom domain),
-    // Google Cloud will reject with Error 400: origin_mismatch because Lovable's client ID does not authorize Vercel.
-    // In that case, seamlessly open the Google Account Chooser dialog!
-    if (!hasCustomGoogleClientId && !isLovableHost) {
-      setShowGoogleModal(true);
-      return;
+    // Direct navigation to the dedicated Google Sign-in Account Chooser route
+    const targetNext = next || "/portal";
+    if (typeof window !== "undefined") {
+      window.location.href = `/auth/google?next=${encodeURIComponent(targetNext)}`;
+    } else {
+      void navigate({ to: "/auth/google", search: { next: targetNext } });
     }
-
-    // Live Google OAuth 2.0 popup
-    if (typeof window !== "undefined" && window.google?.accounts?.oauth2) {
-      try {
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: "openid profile email",
-          callback: async (tokenResponse) => {
-            if (tokenResponse.error) {
-              if (tokenResponse.error === "origin_mismatch") {
-                // Graceful fallback to account prompt
-                setShowGoogleModal(true);
-                return;
-              }
-              if (tokenResponse.error !== "access_denied") {
-                setError(`Google sign in: ${tokenResponse.error}`);
-              }
-              return;
-            }
-            if (tokenResponse.access_token) {
-              setBusy(true);
-              try {
-                const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                });
-                if (!res.ok) throw new Error("Could not retrieve profile from Google.");
-                const info = (await res.json()) as {
-                  email: string;
-                  name?: string;
-                  picture?: string;
-                  sub: string;
-                };
-                await processGoogleUser({
-                  email: info.email,
-                  name: info.name || info.email.split("@")[0] || "Trishul Customer",
-                  picture: info.picture,
-                  sub: info.sub,
-                });
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Failed to load Google profile.");
-                setBusy(false);
-              }
-            }
-          },
-        });
-        tokenClient.requestAccessToken({ prompt: "select_account" });
-        return;
-      } catch (err) {
-        console.warn("[auth] Google oauth2 token client:", err);
-      }
-    }
-
-    // Fallback to Google prompt dialog
-    setShowGoogleModal(true);
   }
 
   /**
