@@ -194,7 +194,18 @@ function AuthPage() {
   const [savedAccounts, setSavedAccounts] = useState<GoogleAccountRecord[]>([]);
 
   useEffect(() => {
-    setSavedAccounts(getStoredGoogleAccounts());
+    if (typeof window !== "undefined") {
+      try {
+        // Clear any old mock or test accounts
+        const stored = getStoredGoogleAccounts().filter(
+          (a) => !a.email.toLowerCase().includes("rajan") && !a.name.toLowerCase().includes("rajan"),
+        );
+        localStorage.setItem(LOCAL_STORAGE_ACCOUNTS_KEY, JSON.stringify(stored));
+        setSavedAccounts(stored);
+      } catch {
+        setSavedAccounts([]);
+      }
+    }
   }, []);
 
   // 1. Monitor incoming auth redirect tokens (hash) and existing session
@@ -695,7 +706,7 @@ function AuthPage() {
                     onChange={(e) => setCompany(e.target.value)}
                     className={fieldClass}
                     autoComplete="organization"
-                    placeholder="e.g. Petrofac, Technip, ADNOC"
+                    placeholder="Enter your company name"
                   />
                 </label>
                 <label className="block">
@@ -706,7 +717,7 @@ function AuthPage() {
                     onChange={(e) => setContactName(e.target.value)}
                     className={fieldClass}
                     autoComplete="name"
-                    placeholder="Full name"
+                    placeholder="Enter your name"
                   />
                 </label>
               </>
@@ -721,7 +732,7 @@ function AuthPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className={fieldClass}
                 autoComplete="email"
-                placeholder="procurement@company.com"
+                placeholder="Enter your email"
               />
             </label>
 
@@ -735,7 +746,7 @@ function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className={fieldClass}
                 autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                placeholder="At least 8 characters"
+                placeholder="Enter your password"
               />
             </label>
 
@@ -835,33 +846,35 @@ function AuthPage() {
             <p className="mt-4 text-xl font-semibold">Choose a Google account</p>
             <p className="text-xs text-muted-foreground">to continue to Trishul Metals & Alloys</p>
 
-            {/* Previously signed in accounts on this PC/browser */}
-            {savedAccounts.length > 0 ? (
+            {/* Previously signed in accounts on this PC/browser (excluding test names) */}
+            {savedAccounts.filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan")).length > 0 ? (
               <div className="mt-4 divide-y divide-border/40">
-                {savedAccounts.map((acc) => (
-                  <button
-                    key={acc.email}
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void processGoogleUser({
-                        email: acc.email,
-                        name: acc.name,
-                        sub: `google_${btoa(acc.email).slice(0, 16)}`,
-                        picture: acc.picture,
-                      })
-                    }
-                    className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
-                      {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
-                      <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
-                    </div>
-                  </button>
-                ))}
+                {savedAccounts
+                  .filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan"))
+                  .map((acc) => (
+                    <button
+                      key={acc.email}
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void processGoogleUser({
+                          email: acc.email,
+                          name: acc.name,
+                          sub: `google_${btoa(acc.email).slice(0, 16)}`,
+                          picture: acc.picture,
+                        })
+                      }
+                      className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
+                        {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
+                        <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
+                      </div>
+                    </button>
+                  ))}
               </div>
             ) : null}
 
@@ -881,24 +894,26 @@ function AuthPage() {
               className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
             >
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Your Google Account Email *</span>
+                <span className="text-xs font-medium text-muted-foreground">Google Account Email *</span>
                 <input
                   required
                   type="email"
                   value={customGoogleEmail}
                   onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                  placeholder="e.g. yourname@gmail.com"
+                  placeholder="Enter your email"
+                  autoComplete="email"
                   className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </label>
 
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Full Name (Optional)</span>
+                <span className="text-xs font-medium text-muted-foreground">Your Name</span>
                 <input
                   type="text"
                   value={customGoogleName}
                   onChange={(e) => setCustomGoogleName(e.target.value)}
-                  placeholder="e.g. Rajan Pal"
+                  placeholder="Enter your name"
+                  autoComplete="name"
                   className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </label>
