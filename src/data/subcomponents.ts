@@ -1,0 +1,205 @@
+export interface SubcomponentEntry {
+  id: string;
+  category: string;
+  industry: string;
+  rawStock: string;
+  finishedComponent: string;
+  grade: string;
+  product: string;
+  size: string;
+  note: string;
+}
+
+type SubcomponentInput = Omit<SubcomponentEntry, "note">;
+
+const entries: SubcomponentInput[] = [
+  {
+    id: "offshore-oil-gas",
+    category: "Oil & Gas — Upstream & Midstream",
+    industry: "Offshore Oil & Gas",
+    rawStock: "Super Duplex 2507 / Inconel 625 seamless pipes and heavy bars",
+    finishedComponent: "Pre-spooled firewater headers & mitred elbow segments, root-pass bevelled with root-gap spacers and full third-party witness documentation",
+    grade: "Super Duplex 2507",
+    product: "Elbow / spool",
+    size: "",
+  },
+  {
+    id: "onshore-oil-gas",
+    category: "Oil & Gas — Upstream & Midstream",
+    industry: "Onshore Oil & Gas",
+    rawStock: "Alloy 825 and UNS S31803 duplex bar stock",
+    finishedComponent: "NACE-compliant valve stem blanks and wellhead adapter rings, cut, rough-turned and stress-relieved before final threading",
+    grade: "Alloy 825",
+    product: "Bar / forged ring",
+    size: "",
+  },
+  {
+    id: "sour-service",
+    category: "Oil & Gas — Upstream & Midstream",
+    industry: "Sour Service (H2S)",
+    rawStock: "Heavy-wall seamless pipe to NACE MR0175 / ISO 15156",
+    finishedComponent: "Pre-bored instrument connection spools and pressure-vessel nozzles cut to precise short lengths, with certified hardness testing",
+    grade: "NACE MR0175 / ISO 15156 compliant alloy",
+    product: "Seamless pipe (cut-to-size)",
+    size: "Precise short lengths",
+  },
+  {
+    id: "subsea-engineering",
+    category: "Subsea & Marine Engineering",
+    industry: "Subsea Engineering",
+    rawStock: "Super Duplex UNS S32760 (F55) forgings and thick-wall pipes",
+    finishedComponent: "Manifold jumper sleeves & connector ring segments, precision cut, water-jet profiled and finished to tight ID/OD tolerances",
+    grade: "Super Duplex UNS S32760 (F55)",
+    product: "Bar / forged ring",
+    size: "Tight ID/OD tolerances",
+  },
+  {
+    id: "marine-shipbuilding-fpso",
+    category: "Subsea & Marine Engineering",
+    industry: "Marine & Shipbuilding / FPSO",
+    rawStock: "Cupronickel, Monel 400 and 316L seamless tubes and plates",
+    finishedComponent: "Seawater cooling manifolds & ballast-line distance pieces, cut-to-length, flanged and hydrostatically tested before dispatch",
+    grade: "Cupronickel",
+    product: "Elbow / spool",
+    size: "Cut-to-length",
+  },
+  {
+    id: "seawater-systems",
+    category: "Subsea & Marine Engineering",
+    industry: "Seawater Systems",
+    rawStock: "Duplex 2205 pipe lengths",
+    finishedComponent: "Lift-pump extension spools and intake crossover sleeves, fully end-machined for immediate slip-on or weld-neck installation",
+    grade: "Duplex 2205",
+    product: "Seamless pipe (cut-to-size)",
+    size: "Cut-to-length",
+  },
+  {
+    id: "refineries",
+    category: "Processing Plants & Refineries",
+    industry: "Refineries",
+    rawStock: "Stainless 321 / 347 and Alloy 800H tubes and pipes",
+    finishedComponent: "Crude overhead transition cones and hydroprocessing reactor trim spools, custom-bevelled and thermal-stress relieved",
+    grade: "Stainless 321",
+    product: "Elbow / spool",
+    size: "",
+  },
+  {
+    id: "petrochemical-plants",
+    category: "Processing Plants & Refineries",
+    industry: "Petrochemical Plants",
+    rawStock: "Hastelloy C-276 and Alloy 20 bar and pipe stock",
+    finishedComponent: "Polymerisation dip tubes & reactor nozzle liners cut to exact isometric dimensions with custom wall-thickness matching",
+    grade: "Hastelloy C-276",
+    product: "Seamless pipe (cut-to-size)",
+    size: "Exact isometric dimensions",
+  },
+  {
+    id: "chemical-fertilizer-plants",
+    category: "Processing Plants & Refineries",
+    industry: "Chemical & Fertilizer Plants",
+    rawStock: "904L, 254 SMO and titanium-grade equivalents",
+    finishedComponent: "Acid-recovery evaporator tubes & urea-plant reactor sleeve inserts, precision saw-cut to squareness tolerances within 0.5 mm",
+    grade: "904L",
+    product: "Seamless tube (cut-to-size)",
+    size: "Squareness tolerance within 0.5 mm",
+  },
+  {
+    id: "pulp-paper",
+    category: "Processing Plants & Refineries",
+    industry: "Pulp & Paper",
+    rawStock: "Duplex and 316L heavy-wall pipes",
+    finishedComponent: "Digester blow-line elbows and bleach-plant manifold segments, pre-formed, sectioned and interior-polished on request",
+    grade: "Duplex",
+    product: "Elbow / spool",
+    size: "",
+  },
+  {
+    id: "lng-plants",
+    category: "Energy, Cryogenics & Thermal Systems",
+    industry: "LNG Plants",
+    rawStock: "304L / 316L austenitic stainless and Nickel Alloy 600 thick pipes",
+    finishedComponent: "Regasification skid tie-in spools & cryogenic valve body rings, cut and impact-tested for sub-zero integrity",
+    grade: "304L",
+    product: "Elbow / spool",
+    size: "",
+  },
+  {
+    id: "gas-processing",
+    category: "Energy, Cryogenics & Thermal Systems",
+    industry: "Gas Processing",
+    rawStock: "Carbon steel A106 Gr. B/C and low-temp A333 Gr. 6",
+    finishedComponent: "Dehydration tower connection nipples & sweetening-unit header stubs, cut to exact length with factory-applied end bevels",
+    grade: "Carbon steel A106 Gr. B/C",
+    product: "Seamless pipe (cut-to-size)",
+    size: "Cut to exact length",
+  },
+  {
+    id: "power-generation",
+    category: "Energy, Cryogenics & Thermal Systems",
+    industry: "Power Generation",
+    rawStock: "High-temperature alloy steels (P91 / P22) and Inconel grades",
+    finishedComponent: "Boiler feed-pump sleeves & turbine steam-extraction line stubs, precision machined to tight thermal tolerances",
+    grade: "P91",
+    product: "Seamless pipe (cut-to-size)",
+    size: "Tight thermal tolerances",
+  },
+  {
+    id: "heat-exchangers",
+    category: "Energy, Cryogenics & Thermal Systems",
+    industry: "Heat Exchangers",
+    rawStock: "U-bend tubes and heavy tube-sheet forged blanks",
+    finishedComponent: "Pre-drilled baffle plates and custom-length shell rings, cut and CNC-machined from solid alloy plate",
+    grade: "Tube-sheet alloy to specification",
+    product: "Plate / machined ring",
+    size: "Custom length",
+  },
+  {
+    id: "high-temperature-applications",
+    category: "Energy, Cryogenics & Thermal Systems",
+    industry: "High-Temperature Applications",
+    rawStock: "Inconel 601, 617 and 690 bars and pipes",
+    finishedComponent: "Furnace reformer pigtail assemblies & radiant tubes, pre-bent, cut and X-ray inspected",
+    grade: "Inconel 601",
+    product: "Seamless tube (cut-to-size)",
+    size: "",
+  },
+  {
+    id: "railway-heavy-industrial",
+    category: "Specialized Industrial & Heavy Engineering",
+    industry: "Railway & Heavy Industrial",
+    rawStock: "76 OD and 116 OD heavy-wall seamless carbon and alloy pipes",
+    finishedComponent: "Underbody bogie-frame Spring Pots cut to exact 400–500 mm lengths with square-faced ends, ready for robotic welding onto the chassis",
+    grade: "Carbon and alloy steel",
+    product: "Seamless pipe (cut-to-size)",
+    size: "76 OD / 116 OD × 400–500 mm length",
+  },
+  {
+    id: "mining-mineral-processing",
+    category: "Specialized Industrial & Heavy Engineering",
+    industry: "Mining & Mineral Processing",
+    rawStock: "Abrasion-resistant and high-alloy thick sections",
+    finishedComponent: "Autoclave slurry-feed nozzles & leach-tank connection spools, plasma-profiled and machined to resist particulate erosion",
+    grade: "Abrasion-resistant alloy",
+    product: "Nozzle / spool",
+    size: "",
+  },
+  {
+    id: "desalination-plants",
+    category: "Specialized Industrial & Heavy Engineering",
+    industry: "Desalination Plants",
+    rawStock: "Super Duplex 2507 and 316L pipes",
+    finishedComponent: "RO high-pressure train header segments & MSF evaporator casing stiffeners, pre-cut and flange-fitted to eliminate on-site fabrication",
+    grade: "Super Duplex 2507",
+    product: "Elbow / spool",
+    size: "",
+  },
+];
+
+export const subcomponents: SubcomponentEntry[] = entries.map((entry) => ({
+  ...entry,
+  note: `${entry.finishedComponent}. Raw stock: ${entry.rawStock}.`,
+}));
+
+export const subcomponentCategories = Array.from(
+  new Set(subcomponents.map((entry) => entry.category)),
+);

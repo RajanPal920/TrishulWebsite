@@ -1,0 +1,37 @@
+# Roadmap
+
+- [x] Add typed sub-component application data.
+- [x] Build the homepage industry selector in the requested position.
+- [x] Extend RFQ note search prefill without changing other behavior.
+- [x] Confirm the selector defaults to Railway & Heavy Industrial.
+- [x] Verify desktop/mobile interaction, deep-link parameters, note prefill, and overflow.
+- [x] Add the animated homepage sub-components bento after the Grade Finder.
+- [x] Verify desktop, tablet, mobile, reduced-motion, overflow, and Processing navigation.
+- [x] Build the grade × product cut-to-size configurator and RFQ handoff.
+- [x] Verify all pre-filled fields, hash landing, reduced motion, responsive overflow, and clean build.
+- [x] Apply the approved homepage-only premium hero, imagery, depth, and rhythm pass.
+- [x] Verify reduced motion, keyboard focus, imagery, links, build, and overflow at 390/768/1280/1536.
+- [x] Capture and compare before/after homepage screenshots at desktop and mobile.
+- [x] Generate and quality-review the cohesive photoreal homepage image set.
+- [x] Replace weak homepage-only imagery and apply one shared graphite/gold grade.
+- [x] Update hero preload and social image, then verify imagery, reduced motion, build, and overflow at 390/768/1280/1536.
+- [x] Capture and review final desktop/mobile screenshots and show the generated source set.
+- [x] Add purposeful card, CTA, and buyer-tool interaction motion.
+- [x] Verify reduced motion, RFQ handoff, overflow, runtime behavior, and build.
+- [x] Add the GSAP raw-stock to finished-component scroll story to the homepage bento.
+- [x] Verify reversible scroll progress, static reduced-motion fallback, responsive overflow, and build.
+- [x] Add the Terms of Service page at /terms with the footer link beside Privacy Policy.
+- [x] Verify headings, breadcrumbs, footer navigation, reduced motion, focus, overflow at 390/768/1280/1536, and clean build.
+- [x] Replace the homepage transformation cards with six matched raw-to-finished image pairs.
+- [x] Eliminate text collisions and verify the scroll story, reduced-motion fallback, responsive overflow, and build.
+- [x] Apply the approved shared industrial motion system to homepage, directories, selectors, and RFQ.
+- [x] Verify motion, reduced-motion, RFQ behavior, responsive overflow, runtime, and build.
+
+- [ ] Connect RFQ submissions to inbox notifications and acknowledgement PDFs.
+- [ ] Add secure account creation, profile editing, RFQ history and certificate downloads.
+- [ ] Add the dedicated RFQ confirmation page with pending-review cost status.
+- [ ] Verify account, RFQ, PDF, dashboard, responsive, security and build flows.
+- [ ] Publish the site and connect www.trishulmetal.com.
+- [ ] Add separate class/schedule and facing capture to RFQ lines.
+- [ ] Add the branded preliminary quotation PDF with pending landed cost.
+- [ ] Link and verify the quotation download on confirmation and customer dashboard.

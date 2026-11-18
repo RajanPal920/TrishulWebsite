@@ -1,0 +1,41 @@
+export const mtcSpecimen = {
+  certPrefix: "TMA/MTC/",
+  heat: "H-22053P",
+  summary: [
+    { label: "Customer", value: null, redactWidth: 7 },
+    { label: "Purchase order", value: null, redactWidth: 5 },
+    { label: "Product", value: 'Seamless pipe, 6" SCH 40S' },
+    { label: "Material", value: "ASTM A790 UNS S31803 (Duplex 2205)" },
+    { label: "Heat number", value: "H-22053P" },
+    { label: "Quantity", value: "36 lengths / 216 m" },
+    { label: "Heat treatment", value: "Solution annealed 1050 °C, water quenched" },
+    { label: "Melting source", value: null, redactWidth: 6 },
+  ] as { label: string; value: string | null; redactWidth?: number }[],
+  chem: [
+    ["C", "0.019", "≤ 0.030"],
+    ["Cr", "22.41", "21.0 – 23.0"],
+    ["Ni", "5.62", "4.5 – 6.5"],
+    ["Mo", "3.14", "2.5 – 3.5"],
+    ["N", "0.168", "0.08 – 0.20"],
+    ["Mn", "1.42", "≤ 2.00"],
+    ["S", "0.001", "≤ 0.020"],
+    ["P", "0.024", "≤ 0.030"],
+  ],
+  mech: [
+    ["Tensile strength", "742 MPa", "≥ 620 MPa"],
+    ["Yield strength (0.2 %)", "561 MPa", "≥ 450 MPa"],
+    ["Elongation (A5)", "31 %", "≥ 25 %"],
+    ["Hardness", "241 HBW", "≤ 293 HBW"],
+    ["Impact (−46 °C, avg)", "112 J", "≥ 45 J"],
+    ["Ferrite content", "48 %", "35 – 65 %"],
+  ],
+  tests: [
+    ["Intergranular corrosion", "ASTM A262 Practice E", "No fissures — Pass"],
+    ["Pitting corrosion", "ASTM G48 Method A, 25 °C / 24 h", "0.9 g/m² — Pass"],
+    ["Hydrostatic test", "ASTM A790, 1.5 × rating", "No leakage — Pass"],
+    ["PMI", "Portable XRF, 100 %", "Conforms to UNS S31803"],
+    ["Dimensional", "ASME B36.19M", "Within tolerance"],
+  ],
+  declaration:
+    "We certify that the material described above has been manufactured, tested and inspected in accordance with the requirements of the order and the governing specification, and that the results conform. Issued under EN 10204:2004 Type 3.1 by the manufacturer's authorised inspection representative.",
+};
