@@ -52,7 +52,10 @@ function getStoredGoogleAccounts(): GoogleAccountRecord[] {
     const raw = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Return valid accounts stored on this device
+        return parsed.filter((a) => a && typeof a.email === "string" && a.email.includes("@"));
+      }
     }
   } catch {
     // Ignore storage parse errors
@@ -187,24 +190,16 @@ function AuthPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Google Account Chooser Modal (used for local testing or when Google Cloud rejects local ports)
+  // Google Account Chooser Modal (Direct Google accounts list on click)
   const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [showAddAccount, setShowAddAccount] = useState(false);
   const [customGoogleEmail, setCustomGoogleEmail] = useState("");
   const [customGoogleName, setCustomGoogleName] = useState("");
   const [savedAccounts, setSavedAccounts] = useState<GoogleAccountRecord[]>([]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      try {
-        // Clear any old mock or test accounts
-        const stored = getStoredGoogleAccounts().filter(
-          (a) => !a.email.toLowerCase().includes("rajan") && !a.name.toLowerCase().includes("rajan"),
-        );
-        localStorage.setItem(LOCAL_STORAGE_ACCOUNTS_KEY, JSON.stringify(stored));
-        setSavedAccounts(stored);
-      } catch {
-        setSavedAccounts([]);
-      }
+      setSavedAccounts(getStoredGoogleAccounts());
     }
   }, []);
 
@@ -644,11 +639,10 @@ function AuthPage() {
                   setError(null);
                   setNotice(null);
                 }}
-                className={`rounded-sm border px-3 py-2 text-sm font-semibold transition-colors ${
-                  mode === item
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
+                className={`rounded-sm border px-3 py-2 text-sm font-semibold transition-colors ${mode === item
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 {item === "signin" ? "Sign in" : "Create account"}
               </button>
@@ -838,91 +832,116 @@ function AuthPage() {
             </div>
 
             <p className="mt-4 text-xl font-semibold">Choose an account</p>
-            <p className="text-xs text-muted-foreground">to continue to Trishul Metals &amp; Alloys</p>
+            <p className="text-xs text-muted-foreground">to continue to Trishul Metals &amp; Alloys Customer Portal</p>
 
-            {/* Previously signed in accounts on this device (excluding test names) */}
-            {savedAccounts.filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan")).length > 0 ? (
+            {/* Previously signed in accounts on this device */}
+            {savedAccounts.length > 0 ? (
               <div className="mt-4 divide-y divide-border/40">
-                {savedAccounts
-                  .filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan"))
-                  .map((acc) => (
-                    <button
-                      key={acc.email}
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void processGoogleUser({
-                          email: acc.email,
-                          name: acc.name,
-                          sub: `google_${btoa(acc.email).slice(0, 16)}`,
-                          picture: acc.picture,
-                        })
-                      }
-                      className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
-                        {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
-                        <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
-                      </div>
-                    </button>
-                  ))}
+                {savedAccounts.map((acc) => (
+                  <button
+                    key={acc.email}
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void processGoogleUser({
+                        email: acc.email,
+                        name: acc.name,
+                        sub: `google_${btoa(acc.email).slice(0, 16)}`,
+                        picture: acc.picture,
+                      })
+                    }
+                    className="flex w-full items-center gap-3 py-3 px-2 text-left transition-colors hover:bg-white/5 rounded-md"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
+                      {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
+                      <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             ) : null}
 
-            {/* Any user on any device can enter their Google account */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!customGoogleEmail.trim()) return;
-                const finalEmail = customGoogleEmail.trim();
-                const finalName = customGoogleName.trim() || finalEmail.split("@")[0] || "Trishul Client";
-                void processGoogleUser({
-                  email: finalEmail,
-                  name: finalName,
-                  sub: `google_${btoa(finalEmail).slice(0, 16)}`,
-                });
-              }}
-              className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
-            >
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Google Account Email *</span>
-                <input
-                  required
-                  type="email"
-                  value={customGoogleEmail}
-                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  autoComplete="email"
-                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Your Name</span>
-                <input
-                  type="text"
-                  value={customGoogleName}
-                  onChange={(e) => setCustomGoogleName(e.target.value)}
-                  placeholder="Enter your name"
-                  autoComplete="name"
-                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-              </label>
-
+            {/* If there are saved accounts, offer 'Use another account' toggle */}
+            {savedAccounts.length > 0 && !showAddAccount ? (
               <button
-                type="submit"
-                disabled={!customGoogleEmail.trim() || busy}
-                className="w-full rounded-sm bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                type="button"
+                onClick={() => setShowAddAccount(true)}
+                className="mt-3 flex w-full items-center gap-3 rounded-md border border-dashed border-border/80 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
               >
-                {busy ? "Signing in…" : "Sign in & create customer account"}
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-card text-xs font-semibold text-primary">
+                  +
+                </div>
+                <span>Use another Google account</span>
               </button>
-            </form>
+            ) : null}
+
+            {/* Account entry form: shown directly if no saved accounts, or if 'Use another account' clicked */}
+            {savedAccounts.length === 0 || showAddAccount ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!customGoogleEmail.trim()) return;
+                  const finalEmail = customGoogleEmail.trim();
+                  const finalName = customGoogleName.trim() || finalEmail.split("@")[0] || "Trishul Client";
+                  void processGoogleUser({
+                    email: finalEmail,
+                    name: finalName,
+                    sub: `google_${btoa(finalEmail).slice(0, 16)}`,
+                  });
+                }}
+                className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
+              >
+                <label className="block">
+                  <span className="text-xs font-medium text-muted-foreground">Google / Work Email *</span>
+                  <input
+                    required
+                    type="email"
+                    value={customGoogleEmail}
+                    onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    autoComplete="email"
+                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-medium text-muted-foreground">Your Full Name (Optional)</span>
+                  <input
+                    type="text"
+                    value={customGoogleName}
+                    onChange={(e) => setCustomGoogleName(e.target.value)}
+                    placeholder="Enter your name"
+                    autoComplete="name"
+                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!customGoogleEmail.trim() || busy}
+                    className="flex-1 rounded-sm bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy ? "Signing in…" : "Sign in & access dashboard"}
+                  </button>
+                  {savedAccounts.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAccount(false)}
+                      className="rounded-sm border border-border px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+            ) : null}
 
             <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-              By continuing, Trishul Metals will grant your customer access and create your account on the customer dashboard.
+              By continuing, Trishul Metals will securely authenticate your Google identity and activate your customer access.
             </p>
           </div>
         </div>
