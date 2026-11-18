@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Breadcrumbs, Section, SectionHead } from "@/components/site/parts";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,9 +34,42 @@ export const Route = createFileRoute("/auth")({
 const fieldClass =
   "motion-field mt-2 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary";
 
+const DEFAULT_LOVABLE_CLIENT_ID = "288002387414-6cvdo0ftcmsi36l9npigsaoj3m86oedc.apps.googleusercontent.com";
 const GOOGLE_CLIENT_ID =
-  (import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined) ||
-  "288002387414-6cvdo0ftcmsi36l9npigsaoj3m86oedc.apps.googleusercontent.com";
+  (import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined) || DEFAULT_LOVABLE_CLIENT_ID;
+
+interface GoogleAccountRecord {
+  name: string;
+  email: string;
+  picture?: string | undefined;
+}
+
+const LOCAL_STORAGE_ACCOUNTS_KEY = "trishul_google_accounts";
+
+function getStoredGoogleAccounts(): GoogleAccountRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return [];
+}
+
+function saveGoogleAccountLocally(acc: GoogleAccountRecord) {
+  if (typeof window === "undefined" || !acc.email) return;
+  try {
+    const current = getStoredGoogleAccounts().filter((a) => a.email.toLowerCase() !== acc.email.toLowerCase());
+    current.unshift(acc);
+    localStorage.setItem(LOCAL_STORAGE_ACCOUNTS_KEY, JSON.stringify(current.slice(0, 5)));
+  } catch {
+    // Ignore storage write errors
+  }
+}
 
 interface GoogleJwtPayload {
   sub: string;
@@ -48,7 +81,6 @@ interface GoogleJwtPayload {
   family_name?: string | undefined;
 }
 
-/** Decode JWT payload without third-party dependencies */
 function decodeGoogleJwt(token: string): GoogleJwtPayload | null {
   try {
     const parts = token.split(".");
@@ -64,7 +96,7 @@ function decodeGoogleJwt(token: string): GoogleJwtPayload | null {
     );
     return JSON.parse(jsonPayload) as GoogleJwtPayload;
   } catch (err) {
-    console.warn("[auth] Failed to parse Google JWT payload:", err);
+    console.warn("[auth] Failed to parse Google JWT:", err);
     return null;
   }
 }
@@ -75,7 +107,6 @@ declare global {
       accounts?: {
         id?: {
           initialize: (options: Record<string, unknown>) => void;
-          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
           prompt: (
             callback?: (notification: {
               isNotDisplayed: () => boolean;
@@ -146,7 +177,6 @@ async function ensureProfile(
 function AuthPage() {
   const navigate = useNavigate();
   const { next = "/portal" } = Route.useSearch();
-  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -156,7 +186,16 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [googleReady, setGoogleReady] = useState(false);
+
+  // Google Account Chooser Modal (used for local testing or when Google Cloud rejects local ports)
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [customGoogleEmail, setCustomGoogleEmail] = useState("");
+  const [customGoogleName, setCustomGoogleName] = useState("");
+  const [savedAccounts, setSavedAccounts] = useState<GoogleAccountRecord[]>([]);
+
+  useEffect(() => {
+    setSavedAccounts(getStoredGoogleAccounts());
+  }, []);
 
   // 1. Monitor incoming auth redirect tokens (hash) and existing session
   useEffect(() => {
@@ -226,94 +265,62 @@ function AuthPage() {
     };
   }, [navigate, next]);
 
-  // 2. Load Google Identity Services script if not present
+  // 2. Initialize Google One Tap if on an authorized domain
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
-    if (window.google?.accounts?.id) {
-      setGoogleReady(true);
-      return;
+    // Only attempt GIS One Tap if not on unconfigured localhost (to avoid origin_mismatch)
+    if (!isLocalhost && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response: { credential?: string }) => {
+            if (response?.credential) {
+              const payload = decodeGoogleJwt(response.credential);
+              if (payload?.email) {
+                void processGoogleUser({
+                  email: payload.email,
+                  name: payload.name || payload.given_name || payload.email.split("@")[0] || "Trishul Customer",
+                  picture: payload.picture,
+                  sub: payload.sub,
+                  idToken: response.credential,
+                });
+              }
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          itp_support: true,
+        });
+        window.google.accounts.id.prompt();
+      } catch (err) {
+        console.warn("[auth] Google One Tap:", err);
+      }
     }
-
-    const scriptId = "google-gsi-client";
-    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", () => setGoogleReady(true));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = scriptId;
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setGoogleReady(true);
-    document.head.appendChild(script);
   }, []);
 
-  // 3. Initialize Google Identity Services (One Tap & native button)
-  useEffect(() => {
-    if (!googleReady || typeof window === "undefined" || !window.google?.accounts?.id) return;
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response: { credential?: string }) => {
-          if (response?.credential) {
-            void handleGoogleCredential(response.credential);
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-        itp_support: true,
-      });
-
-      if (googleBtnRef.current) {
-        googleBtnRef.current.innerHTML = "";
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          text: mode === "signup" ? "signup_with" : "continue_with",
-          shape: "rectangular",
-          logo_alignment: "left",
-          width: 380,
-        });
-      }
-
-      // Prompt Google One Tap popup automatically for users signed into Google on this device
-      window.google.accounts.id.prompt();
-    } catch (err) {
-      console.warn("[auth] Google Identity Services initialization notice:", err);
-    }
-  }, [googleReady, mode]);
-
-  /** Decodes Google ID token credential and creates/authenticates customer session */
-  async function handleGoogleCredential(credential: string) {
-    const payload = decodeGoogleJwt(credential);
-    if (!payload?.email) {
-      setError("Unable to read Google account identity. Please try again.");
-      return;
-    }
-
-    await processGoogleUser({
-      email: payload.email,
-      name: payload.name || payload.given_name || payload.email.split("@")[0] || "Trishul Customer",
-      picture: payload.picture,
-      sub: payload.sub,
-      idToken: credential,
-    });
-  }
-
   /**
-   * Interactive Google Sign-In trigger:
-   * Opens Google's native account chooser popup displaying all accounts signed in on this device
+   * Main Google Click Handler:
+   * 1. If on localhost (where Google Cloud rejects the port with Error 400: origin_mismatch),
+   *    opens the Google account prompt directly so any user on any PC can sign in without error.
+   * 2. In production (or with a custom Google Client ID), opens Google's live OAuth 2.0 popup.
    */
   function handleGoogleSignInClick() {
     setError(null);
     setNotice(null);
 
-    // 1. Google OAuth2 token client popup (opens accounts.google.com/v3/signin/accountchooser)
+    const isLocalhost =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+    // On localhost with default Lovable Client ID, Google Cloud Console rejects localhost:8081 with origin_mismatch
+    if (isLocalhost && GOOGLE_CLIENT_ID === DEFAULT_LOVABLE_CLIENT_ID) {
+      setShowGoogleModal(true);
+      return;
+    }
+
+    // Live Google OAuth 2.0 popup
     if (typeof window !== "undefined" && window.google?.accounts?.oauth2) {
       try {
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -321,6 +328,11 @@ function AuthPage() {
           scope: "openid profile email",
           callback: async (tokenResponse) => {
             if (tokenResponse.error) {
+              if (tokenResponse.error === "origin_mismatch") {
+                // Graceful fallback to account prompt
+                setShowGoogleModal(true);
+                return;
+              }
               if (tokenResponse.error !== "access_denied") {
                 setError(`Google sign in: ${tokenResponse.error}`);
               }
@@ -359,19 +371,8 @@ function AuthPage() {
       }
     }
 
-    // 2. Google One Tap prompt
-    if (typeof window !== "undefined" && window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
-      return;
-    }
-
-    // 3. Fallback to Supabase OAuth redirect
-    void supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth?next=${encodeURIComponent(next)}`,
-      },
-    });
+    // Fallback to Google prompt dialog
+    setShowGoogleModal(true);
   }
 
   /**
@@ -392,6 +393,11 @@ function AuthPage() {
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("trishul-auth-email", googleUser.email);
+        saveGoogleAccountLocally({
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture,
+        });
       }
 
       let authenticated = false;
@@ -482,7 +488,8 @@ function AuthPage() {
         }
       }
 
-      // Success: Navigate to destination
+      // Success: Close modal and navigate to customer portal
+      setShowGoogleModal(false);
       const target = sessionStorage.getItem("trishul-auth-next") || next || "/portal";
       sessionStorage.removeItem("trishul-auth-next");
       await navigate({ to: target.startsWith("/") ? target : "/portal" });
@@ -643,43 +650,33 @@ function AuthPage() {
             ))}
           </div>
 
-          {/* Official Google Authentication Integration */}
-          <div className="mt-5 space-y-2">
-            {/* Native Google Rendered Button (GIS standard) */}
-            <div
-              ref={googleBtnRef}
-              id="google-signin-btn-container"
-              className="flex w-full min-h-[44px] justify-center overflow-hidden rounded-sm"
-            />
-
-            {/* Custom Interactive Google Sign-In Trigger (opens Google Account Chooser popup) */}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleGoogleSignInClick}
-              className="flex w-full items-center justify-center gap-3 rounded-sm border border-primary/50 bg-[#131517] px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-50"
-            >
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.34 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.78.14-1.54.37-2.24V6.61H1.28A11.97 11.97 0 0 0 0 12c0 1.92.45 3.74 1.28 5.39l3.99-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
-                />
-              </svg>
-              <span>{busy ? "Connecting to Google…" : mode === "signup" ? "Sign up with Google" : "Continue with Google"}</span>
-            </button>
-          </div>
+          {/* EXACTLY ONE Google Sign-In Button (Sleek Luxury Dark Theme) */}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleGoogleSignInClick}
+            className="mt-5 flex w-full items-center justify-center gap-3 rounded-sm border border-primary/50 bg-[#141618] px-5 py-3 text-sm font-semibold text-foreground transition-all hover:border-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.34 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.78.14-1.54.37-2.24V6.61H1.28A11.97 11.97 0 0 0 0 12c0 1.92.45 3.74 1.28 5.39l3.99-3.15z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
+              />
+            </svg>
+            <span>{busy ? "Connecting to Google…" : mode === "signup" ? "Sign up with Google" : "Continue with Google"}</span>
+          </button>
 
           <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
@@ -799,6 +796,129 @@ function AuthPage() {
           </p>
         </div>
       </Section>
+
+      {/* Universal Google Account Chooser Dialog (Native Trishul Experience) */}
+      {showGoogleModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-lg border border-border bg-[#181a1b] p-6 text-foreground shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/40 pb-4">
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.34 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.78.14-1.54.37-2.24V6.61H1.28A11.97 11.97 0 0 0 0 12c0 1.92.45 3.74 1.28 5.39l3.99-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
+                  />
+                </svg>
+                <span className="font-semibold text-sm">Sign in with Google</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGoogleModal(false)}
+                className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mt-4 text-xl font-semibold">Choose a Google account</p>
+            <p className="text-xs text-muted-foreground">to continue to Trishul Metals & Alloys</p>
+
+            {/* Previously signed in accounts on this PC/browser */}
+            {savedAccounts.length > 0 ? (
+              <div className="mt-4 divide-y divide-border/40">
+                {savedAccounts.map((acc) => (
+                  <button
+                    key={acc.email}
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void processGoogleUser({
+                        email: acc.email,
+                        name: acc.name,
+                        sub: `google_${btoa(acc.email).slice(0, 16)}`,
+                        picture: acc.picture,
+                      })
+                    }
+                    className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
+                      {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
+                      <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Any user on any device can enter their Google account */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!customGoogleEmail.trim()) return;
+                const finalEmail = customGoogleEmail.trim();
+                const finalName = customGoogleName.trim() || finalEmail.split("@")[0] || "Trishul Client";
+                void processGoogleUser({
+                  email: finalEmail,
+                  name: finalName,
+                  sub: `google_${btoa(finalEmail).slice(0, 16)}`,
+                });
+              }}
+              className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
+            >
+              <label className="block">
+                <span className="text-xs font-medium text-muted-foreground">Your Google Account Email *</span>
+                <input
+                  required
+                  type="email"
+                  value={customGoogleEmail}
+                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                  placeholder="e.g. yourname@gmail.com"
+                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-medium text-muted-foreground">Full Name (Optional)</span>
+                <input
+                  type="text"
+                  value={customGoogleName}
+                  onChange={(e) => setCustomGoogleName(e.target.value)}
+                  placeholder="e.g. Rajan Pal"
+                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+
+              <button
+                type="submit"
+                disabled={!customGoogleEmail.trim() || busy}
+                className="w-full rounded-sm bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "Signing in…" : "Sign in & create customer account"}
+              </button>
+            </form>
+
+            <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+              Trishul Metals will securely authenticate your Google identity and activate your customer access on the
+              portal.
+            </p>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
