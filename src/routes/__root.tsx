@@ -208,6 +208,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           publisher: { "@type": "Organization", name: company.name, url: company.siteUrl },
         }),
       },
+      {
+        src: "https://accounts.google.com/gsi/client",
+        async: true,
+        defer: true,
+      },
     ],
   }),
   shellComponent: RootShell,
