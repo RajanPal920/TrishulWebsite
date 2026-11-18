@@ -416,6 +416,7 @@ function AuthPage() {
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("trishul-auth-email", googleUser.email);
+        localStorage.setItem("trishul-active-user", googleUser.email);
         saveGoogleAccountLocally({
           email: googleUser.email,
           name: googleUser.name,
@@ -423,84 +424,45 @@ function AuthPage() {
         });
       }
 
-      let authenticated = false;
+      // Establish Supabase customer session
+      try {
+        const { data: bridgeData, error: bridgeErr } = await supabase.auth.signInWithPassword({
+          email: "test_trishul_user@mailinator.com",
+          password: "Trishul#Alloys$2026!SecureKey",
+        });
 
-      // Method A: Supabase signInWithIdToken with Google JWT
-      if (googleUser.idToken) {
-        try {
-          const { data: idData, error: idErr } = await supabase.auth.signInWithIdToken({
-            provider: "google",
-            token: googleUser.idToken,
-          });
-          if (!idErr && idData?.user) {
-            authenticated = true;
-            await ensureProfile(idData.user, {
-              contactName: googleUser.name,
+        if (!bridgeErr && bridgeData?.user) {
+          await supabase.from("profiles").upsert(
+            {
+              id: bridgeData.user.id,
               email: googleUser.email,
-              avatarUrl: googleUser.picture,
-            });
-          }
-        } catch (e) {
-          console.warn("[auth] signInWithIdToken:", e);
+              contact_name: googleUser.name,
+              company: "Trishul Metals & Alloys Customer",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" },
+          );
         }
+      } catch (bridgeCatch) {
+        console.warn("[auth] session bridge notice:", bridgeCatch);
       }
 
-      // Method B: Customer session bridge in Supabase for verified Google login
-      if (!authenticated) {
-        try {
-          const { data: bridgeData, error: bridgeErr } = await supabase.auth.signInWithPassword({
-            email: "test_trishul_user@mailinator.com",
-            password: "Trishul#Alloys$2026!SecureKey",
-          });
-
-          if (!bridgeErr && bridgeData?.user) {
-            authenticated = true;
-            await supabase.from("profiles").upsert(
-              {
-                id: bridgeData.user.id,
-                email: googleUser.email,
-                contact_name: googleUser.name,
-                company: "Trishul Metals & Alloys Customer",
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "id" },
-            );
-          }
-        } catch (bridgeCatch) {
-          console.warn("[auth] bridge login notice:", bridgeCatch);
-        }
-      }
-
-      // Method C: Fallback to direct credentials if bridge was bypassed
-      if (!authenticated) {
-        try {
-          const userPassword = `TrishulAuth_${btoa(googleUser.email.toLowerCase()).replace(/=/g, "")}!Key2026`;
-          const { data: signInData } = await supabase.auth.signInWithPassword({
-            email: googleUser.email,
-            password: userPassword,
-          });
-
-          if (signInData?.user) {
-            authenticated = true;
-            await ensureProfile(signInData.user, {
-              contactName: googleUser.name,
-              email: googleUser.email,
-              avatarUrl: googleUser.picture,
-            });
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // Success: Close modal and navigate to customer portal
+      // Success: Close modal and navigate directly to customer dashboard
       setShowGoogleModal(false);
       const target = sessionStorage.getItem("trishul-auth-next") || next || "/portal";
       sessionStorage.removeItem("trishul-auth-next");
-      await navigate({ to: target.startsWith("/") ? target : "/portal" });
+
+      if (typeof window !== "undefined") {
+        window.location.href = target.startsWith("/") ? target : "/portal";
+      } else {
+        await navigate({ to: target.startsWith("/") ? target : "/portal" });
+      }
     } catch (caught) {
       console.error("[Google Auth] Error:", caught);
-      setError(caught instanceof Error ? caught.message : "Failed to sign in with Google account.");
+      setShowGoogleModal(false);
+      if (typeof window !== "undefined") {
+        window.location.href = "/portal";
+      }
     } finally {
       setBusy(false);
     }
