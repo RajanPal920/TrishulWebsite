@@ -506,7 +506,7 @@ function Home() {
               body: "1,400+ tonnes exported, zero rejections across witnessed TPI inspections, mapped to real project sectors and destinations.",
             },
             {
-              to: "/auth",
+              to: "/portal",
               icon: "portal" as TechIconName,
               eyebrow: "Repeat buyers",
               title: "Client portal & dossier vault",

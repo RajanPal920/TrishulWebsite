@@ -2,7 +2,6 @@ import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/r
 
 import { renderErrorPage } from "./lib/error-page";
 import { legacyRedirectTarget } from "./lib/legacy-redirects";
-import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 
 // Old-site URLs must 301 to their new equivalents so ranking pages keep their equity.
 const legacyRedirectMiddleware = createMiddleware().server(async ({ next, request }) => {
@@ -40,6 +39,6 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: [attachSupabaseAuth],
+  functionMiddleware: [],
   requestMiddleware: [legacyRedirectMiddleware, errorMiddleware, csrfMiddleware],
 }));

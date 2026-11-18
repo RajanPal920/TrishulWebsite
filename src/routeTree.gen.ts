@@ -10,9 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AboutRouteImport } from './routes/about'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CadRouteImport } from './routes/cad'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -20,17 +18,16 @@ import { Route as FaqRouteImport } from './routes/faq'
 import { Route as LandedCostRouteImport } from './routes/landed-cost'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as MatrixRouteImport } from './routes/matrix'
+import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProcessingRouteImport } from './routes/processing'
 import { Route as QualityRouteImport } from './routes/quality'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RfqRouteImport } from './routes/rfq'
 import { Route as ShortlistRouteImport } from './routes/shortlist'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StockRouteImport } from './routes/stock'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ToolsRouteImport } from './routes/tools'
-import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
 import { Route as IndustriesIndexRouteImport } from './routes/industries.index'
 import { Route as IndustriesSlugRouteImport } from './routes/industries.$slug'
 import { Route as MaterialsIndexRouteImport } from './routes/materials.index'
@@ -48,18 +45,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CadRoute = CadRouteImport.update({
@@ -97,6 +85,11 @@ const MatrixRoute = MatrixRouteImport.update({
   path: '/matrix',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalRoute = PortalRouteImport.update({
+  id: '/portal',
+  path: '/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -110,11 +103,6 @@ const ProcessingRoute = ProcessingRouteImport.update({
 const QualityRoute = QualityRouteImport.update({
   id: '/quality',
   path: '/quality',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RfqRoute = RfqRouteImport.update({
@@ -146,11 +134,6 @@ const ToolsRoute = ToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedPortalRoute = AuthenticatedPortalRouteImport.update({
-  id: '/portal',
-  path: '/portal',
-  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const IndustriesIndexRoute = IndustriesIndexRouteImport.update({
   id: '/industries/',
@@ -211,7 +194,6 @@ const MaterialsSlugProductRoute = MaterialsSlugProductRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
   '/cad': typeof CadRoute
   '/clients': typeof ClientsRoute
   '/contact': typeof ContactRoute
@@ -219,17 +201,16 @@ export interface FileRoutesByFullPath {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
-  '/portal': typeof AuthenticatedPortalRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -245,7 +226,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
   '/cad': typeof CadRoute
   '/clients': typeof ClientsRoute
   '/contact': typeof ContactRoute
@@ -253,17 +233,16 @@ export interface FileRoutesByTo {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
-  '/portal': typeof AuthenticatedPortalRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/rfq/confirmation': typeof RfqConfirmationRoute
@@ -278,9 +257,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
   '/cad': typeof CadRoute
   '/clients': typeof ClientsRoute
   '/contact': typeof ContactRoute
@@ -288,17 +265,16 @@ export interface FileRoutesById {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
-  '/_authenticated/portal': typeof AuthenticatedPortalRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -316,7 +292,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
-    | '/auth'
     | '/cad'
     | '/clients'
     | '/contact'
@@ -324,17 +299,16 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/portal'
     | '/privacy'
     | '/processing'
     | '/quality'
-    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
     | '/stock'
     | '/terms'
     | '/tools'
-    | '/portal'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -350,7 +324,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
-    | '/auth'
     | '/cad'
     | '/clients'
     | '/contact'
@@ -358,17 +331,16 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/portal'
     | '/privacy'
     | '/processing'
     | '/quality'
-    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
     | '/stock'
     | '/terms'
     | '/tools'
-    | '/portal'
     | '/industries/$slug'
     | '/products/$slug'
     | '/rfq/confirmation'
@@ -382,9 +354,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
     | '/about'
-    | '/auth'
     | '/cad'
     | '/clients'
     | '/contact'
@@ -392,17 +362,16 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/portal'
     | '/privacy'
     | '/processing'
     | '/quality'
-    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
     | '/stock'
     | '/terms'
     | '/tools'
-    | '/_authenticated/portal'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -418,9 +387,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AboutRoute: typeof AboutRoute
-  AuthRoute: typeof AuthRoute
   CadRoute: typeof CadRoute
   ClientsRoute: typeof ClientsRoute
   ContactRoute: typeof ContactRoute
@@ -428,10 +395,10 @@ export interface RootRouteChildren {
   LandedCostRoute: typeof LandedCostRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MatrixRoute: typeof MatrixRoute
+  PortalRoute: typeof PortalRoute
   PrivacyRoute: typeof PrivacyRoute
   ProcessingRoute: typeof ProcessingRoute
   QualityRoute: typeof QualityRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
   RfqRoute: typeof RfqRoute
   ShortlistRoute: typeof ShortlistRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -458,25 +425,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/about': {
       id: '/about'
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cad': {
@@ -528,6 +481,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MatrixRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal': {
+      id: '/portal'
+      path: '/portal'
+      fullPath: '/portal'
+      preLoaderRoute: typeof PortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -547,13 +507,6 @@ declare module '@tanstack/react-router' {
       path: '/quality'
       fullPath: '/quality'
       preLoaderRoute: typeof QualityRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rfq': {
@@ -597,13 +550,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/tools'
       preLoaderRoute: typeof ToolsRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/portal': {
-      id: '/_authenticated/portal'
-      path: '/portal'
-      fullPath: '/portal'
-      preLoaderRoute: typeof AuthenticatedPortalRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/industries/': {
       id: '/industries/'
@@ -685,17 +631,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedRouteRouteChildren {
-  AuthenticatedPortalRoute: typeof AuthenticatedPortalRoute
-}
-
-const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedPortalRoute: AuthenticatedPortalRoute,
-}
-
-const AuthenticatedRouteRouteWithChildren =
-  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
-
 interface MaterialsSlugRouteChildren {
   MaterialsSlugProductRoute: typeof MaterialsSlugProductRoute
   MaterialsSlugIndexRoute: typeof MaterialsSlugIndexRoute
@@ -712,9 +647,7 @@ const MaterialsSlugRouteWithChildren = MaterialsSlugRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AboutRoute: AboutRoute,
-  AuthRoute: AuthRoute,
   CadRoute: CadRoute,
   ClientsRoute: ClientsRoute,
   ContactRoute: ContactRoute,
@@ -722,10 +655,10 @@ const rootRouteChildren: RootRouteChildren = {
   LandedCostRoute: LandedCostRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   MatrixRoute: MatrixRoute,
+  PortalRoute: PortalRoute,
   PrivacyRoute: PrivacyRoute,
   ProcessingRoute: ProcessingRoute,
   QualityRoute: QualityRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
   RfqRoute: RfqRoute,
   ShortlistRoute: ShortlistRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

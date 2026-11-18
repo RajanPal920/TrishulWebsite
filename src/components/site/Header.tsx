@@ -225,8 +225,7 @@ export function Header() {
         {/* Action Buttons & Mobile Trigger */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
-            to="/auth"
-            search={{ next: "/portal" }}
+            to="/portal"
             className="hidden lg:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
           >
             Customer login
@@ -351,8 +350,7 @@ export function Header() {
             <div className="border-t border-border pt-4 flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  to="/auth"
-                  search={{ next: "/portal" }}
+                  to="/portal"
                   onClick={() => setOpen(false)}
                   className="flex-1 text-center rounded-sm border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary"
                 >

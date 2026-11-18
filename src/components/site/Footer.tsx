@@ -133,8 +133,8 @@ export function Footer() {
               </a>
             </li>
             <li>
-              <Link to="/auth" search={{ next: "/portal" }} className="text-sm text-muted-foreground hover:text-primary">
-                Customer login
+              <Link to="/portal" className="text-sm text-muted-foreground hover:text-primary">
+                Customer portal
               </Link>
             </li>
             <li>

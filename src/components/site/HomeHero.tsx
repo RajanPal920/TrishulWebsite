@@ -1,14 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Eyebrow } from "@/components/site/parts";
-import { MagneticAction } from "@/components/site/InteractionMotion";
-
-const capabilities = [
-  "Precision saw cutting",
-  "End bevelling (ASME B16.25)",
-  "Rough machining, boring & facing",
-  "Cut-to-drawing components",
-];
+import craHero1920 from "@/assets/home/cra-components-hero-1920.webp";
+import craHero1280 from "@/assets/home/cra-components-hero-1280.webp";
 
 // Smooth count up animation that runs from initial (0) to final (end) whenever scrolled into view
 function CountUp({
@@ -52,104 +45,139 @@ function CountUp({
 
 export function HomeHero() {
   return (
-    <section className="home-grain relative isolate overflow-hidden border-b border-border px-5 pt-3 pb-8 md:px-10 md:pt-5 md:pb-10 lg:pt-6 lg:pb-12">
-      {/* 100% clearly visible hero image without darkening overlay */}
-      <picture className="absolute inset-0 -z-30">
+    <section className="relative isolate overflow-hidden border-b border-border bg-background">
+      {/* Background Warehouse Rack Image */}
+      <picture className="absolute inset-0 -z-30 pointer-events-none select-none">
+        <source srcSet={craHero1280} media="(max-width: 1024px)" />
         <img
-          src="/images/heroes/hero-home.jpg"
+          src={craHero1920}
           alt="Heat-number tagged corrosion-resistant alloy pipe inventory arranged in warehouse racks"
-          width={1024}
-          height={441}
+          width={1920}
+          height={1088}
           fetchPriority="high"
-          className="home-catalogue-image h-full w-full object-cover object-right md:object-right-top"
+          className="h-full w-full object-cover object-right"
         />
       </picture>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col justify-between gap-6 sm:gap-8">
-        {/* High-contrast content panel ensuring 100% crystal-clear readability */}
-        <div className="max-w-3xl rounded-lg bg-background/95 p-5 sm:p-7 lg:p-8 border border-border/80 shadow-2xl backdrop-blur-md">
-          <Eyebrow>Established supply · Mumbai, India · Global export</Eyebrow>
+      {/* Horizontal Dark Gradient Overlay: Deep black on left for crystal-clear readability, fading to reveal pipes on right */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-20 bg-gradient-to-r from-background via-background/90 to-background/25 pointer-events-none"
+      />
 
-          <div className="mt-3">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.08] drop-shadow-md">
-              Critical alloy piping components.
-              <span className="mt-1.5 block text-primary font-semibold">Engineered around your specification.</span>
-            </h1>
-          </div>
+      {/* Vertical Subtle Bottom Gradient to anchor the stats */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 -z-10 h-64 bg-gradient-to-t from-background via-background/70 to-transparent pointer-events-none"
+      />
 
-          <div aria-hidden className="mt-5 h-0.5 w-24 bg-primary" />
+      {/* Engineering Blueprint / CAD Grid Overlay matching reference design */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none"
+      />
 
-          <p className="mt-5 text-sm sm:text-base leading-relaxed text-zinc-100 font-normal">
+      <div className="mx-auto flex w-full max-w-7xl flex-col justify-between px-5 pt-8 pb-8 sm:px-8 sm:pt-10 sm:pb-10 lg:px-10 lg:pt-12 lg:pb-12">
+        {/* Main Content Column directly on background gradient */}
+        <div className="max-w-2xl lg:max-w-3xl">
+          <p className="font-mono text-[11px] sm:text-xs uppercase tracking-[0.22em] text-primary font-semibold">
+            Established supply · Mumbai, India · Global export
+          </p>
+
+          <h1 className="mt-3.5 sm:mt-4 text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] xl:text-[3.6rem] font-bold tracking-tight leading-[1.08]">
+            <span className="text-white block">Critical alloy piping</span>
+            <span className="text-white block">components.</span>
+            <span className="text-primary block mt-1">Engineered around</span>
+            <span className="text-primary block">your specification.</span>
+          </h1>
+
+          <p className="mt-4 sm:mt-5 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-zinc-300 font-normal">
             Nickel alloy, duplex, super duplex and stainless steel Corrosion-Resistant Alloy (CRA) flanges and pipe fittings supplied against ASTM, ASME, NACE and applicable NORSOK M-630 requirements, with heat-traceable EN 10204 3.1 documentation.
           </p>
 
-          <p className="mt-3 text-xs sm:text-sm leading-relaxed text-zinc-300 font-normal">
+          <p className="mt-2.5 sm:mt-3 text-[11px] sm:text-xs leading-normal text-zinc-400/80 font-normal">
             Materials available against applicable NORSOK M-630 requirements, subject to grade, product form, applicable MDS and manufacturer qualification.
           </p>
 
-          <p className="mt-4 text-sm sm:text-base font-medium leading-relaxed text-white">
+          <p className="mt-3.5 sm:mt-4 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-zinc-100 font-medium">
             Supplied cut-to-size, saw-cut to exact lengths, end-bevelled and pre-machined to your drawing — so you skip in-house cutting waste and local machining delays.
           </p>
 
-          <div className="mt-5 border-l-2 border-primary bg-card/90 px-4 py-3 rounded-r-sm shadow-md">
-            <p className="font-mono text-xs uppercase tracking-[0.16em] text-primary font-semibold">Custom cutting &amp; machining</p>
-            <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs sm:text-sm leading-relaxed text-zinc-200">
-              {capabilities.map((capability, index) => (
-                <span key={capability} className="flex items-baseline gap-x-2">
-                  {index > 0 ? <span aria-hidden className="text-primary">·</span> : null}
-                  <span>{capability}</span>
-                </span>
-              ))}
-              <span className="text-zinc-400">— supply your length, tolerance or drawing.</span>
+          {/* Custom Cutting & Machining Box */}
+          <div className="mt-4 sm:mt-5 border-l-2 border-primary/90 pl-3.5 sm:pl-4 py-1.5 bg-black/20 rounded-r-xs">
+            <p className="font-mono text-[10.5px] sm:text-[11px] uppercase tracking-[0.16em] text-primary font-semibold">
+              Custom cutting &amp; machining
             </p>
-            <Link to="/processing" className="mt-2.5 inline-flex items-center text-xs sm:text-sm font-semibold text-primary transition-opacity hover:opacity-80">
+            <p className="mt-1 text-xs sm:text-[13px] leading-relaxed text-zinc-200">
+              Precision saw cutting · End bevelling (ASME B16.25) · Rough machining, boring &amp; facing
+            </p>
+            <p className="mt-0.5 text-xs sm:text-[13px] leading-relaxed text-zinc-400">
+              - Cut-to-drawing components — supply your length, tolerance or drawing.
+            </p>
+            <Link
+              to="/processing"
+              className="mt-2 inline-flex items-center text-xs sm:text-[13px] font-semibold text-primary transition-opacity hover:opacity-80"
+            >
               See our processing capabilities →
             </Link>
           </div>
 
-          <div className="mt-7 flex flex-wrap gap-3">
-            <MagneticAction>
-              <Link to="/rfq" className="rounded-sm bg-primary px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90">
-                Request cut-to-size quotation
-              </Link>
-            </MagneticAction>
-            <MagneticAction>
-              <Link to="/materials" className="rounded-sm border border-primary/60 bg-background/60 px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-primary backdrop-blur-sm transition-colors hover:bg-primary/10">
-                Browse 28 CRA grades
-              </Link>
-            </MagneticAction>
+          {/* CTA Buttons */}
+          <div className="mt-6 sm:mt-7 flex flex-wrap items-center gap-3">
+            <Link
+              to="/rfq"
+              className="rounded-sm bg-primary px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90"
+            >
+              Request cut-to-size quotation
+            </Link>
+            <Link
+              to="/materials"
+              className="rounded-sm border border-primary/50 bg-black/40 px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-zinc-200 backdrop-blur-xs transition-colors hover:border-primary hover:text-white"
+            >
+              Browse 28 CRA grades
+            </Link>
           </div>
         </div>
 
-        {/* Dynamic Stats Band: CountUp animates on scroll from 0 to final target */}
-        <dl className="grid grid-cols-2 rounded-md border border-border bg-card/95 p-2 shadow-2xl backdrop-blur-md lg:grid-cols-4">
-          <div className="border-r border-b border-border/80 p-4 sm:p-5 lg:border-b-0">
+        {/* Bottom Stats Band: Divided into 4 columns with subtle borders matching reference image */}
+        <dl className="mt-10 sm:mt-12 lg:mt-14 grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-0 border-t border-white/10 pt-5 sm:pt-6">
+          <div className="lg:pr-6 xl:pr-8 lg:border-r lg:border-white/10">
             <dt className="font-display text-2xl sm:text-3xl font-bold tabular-nums text-primary">
               <CountUp end={28} />
             </dt>
-            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">CRA grades documented</dd>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">+ 8 supporting stainless grades</p>
+            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">
+              CRA grades documented
+            </dd>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              + 6 supporting stainless grades
+            </p>
           </div>
 
-          <div className="border-b border-border/80 p-4 sm:p-5 lg:border-r lg:border-b-0">
+          <div className="lg:px-6 xl:px-8 lg:border-r lg:border-white/10">
             <dt className="font-display text-2xl sm:text-3xl font-bold tabular-nums text-primary">
               <CountUp end={18} />
             </dt>
-            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">Flange &amp; fitting types</dd>
+            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">
+              Flange &amp; fitting types
+            </dd>
           </div>
 
-          <div className="border-r border-border/80 p-4 sm:p-5">
+          <div className="lg:px-6 xl:px-8 lg:border-r lg:border-white/10">
             <dt className="font-display text-2xl sm:text-3xl font-bold tabular-nums text-primary">
               <CountUp end={150} /> – <CountUp end={2500} duration={1600} />
             </dt>
-            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">Pressure classes supplied</dd>
+            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">
+              Pressure classes supplied
+            </dd>
           </div>
 
-          <div className="p-4 sm:p-5">
+          <div className="lg:pl-6 xl:pl-8">
             <dt className="font-display text-2xl sm:text-3xl font-bold text-primary">
               EN 10204 <CountUp end={31} divisor={10} />
             </dt>
-            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">Certification standard</dd>
+            <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">
+              Certification standard
+            </dd>
           </div>
         </dl>
       </div>
