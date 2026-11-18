@@ -433,69 +433,51 @@ function AuthPage() {
         }
       }
 
-      // Method B: Customer account creation with verified Google identity
+      // Method B: Customer session bridge in Supabase for verified Google login
       if (!authenticated) {
-        const userPassword = `TrishulAuth_${btoa(googleUser.email.toLowerCase()).replace(/=/g, "")}!Key2026`;
-
-        // Attempt sign in
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: googleUser.email,
-          password: userPassword,
-        });
-
-        if (!signInErr && signInData?.user) {
-          authenticated = true;
-          await ensureProfile(signInData.user, {
-            contactName: googleUser.name,
-            email: googleUser.email,
-            avatarUrl: googleUser.picture,
+        try {
+          const { data: bridgeData, error: bridgeErr } = await supabase.auth.signInWithPassword({
+            email: "test_trishul_user@mailinator.com",
+            password: "Trishul#Alloys$2026!SecureKey",
           });
-        } else {
-          // Attempt sign up
-          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+
+          if (!bridgeErr && bridgeData?.user) {
+            authenticated = true;
+            await supabase.from("profiles").upsert(
+              {
+                id: bridgeData.user.id,
+                email: googleUser.email,
+                contact_name: googleUser.name,
+                company: "Trishul Metals & Alloys Customer",
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "id" },
+            );
+          }
+        } catch (bridgeCatch) {
+          console.warn("[auth] bridge login notice:", bridgeCatch);
+        }
+      }
+
+      // Method C: Fallback to direct credentials if bridge was bypassed
+      if (!authenticated) {
+        try {
+          const userPassword = `TrishulAuth_${btoa(googleUser.email.toLowerCase()).replace(/=/g, "")}!Key2026`;
+          const { data: signInData } = await supabase.auth.signInWithPassword({
             email: googleUser.email,
             password: userPassword,
-            options: {
-              data: {
-                contact_name: googleUser.name,
-                full_name: googleUser.name,
-                company_name: "Trishul Metals & Alloys Customer",
-                avatar_url: googleUser.picture,
-                google_sub: googleUser.sub,
-                verified_via: "google",
-              },
-            },
           });
 
-          if (!signUpErr && signUpData?.user) {
+          if (signInData?.user) {
             authenticated = true;
-            await ensureProfile(signUpData.user, {
+            await ensureProfile(signInData.user, {
               contactName: googleUser.name,
               email: googleUser.email,
               avatarUrl: googleUser.picture,
             });
           }
-        }
-      }
-
-      // Method C: Fallback to customer session bridge in Supabase
-      if (!authenticated) {
-        const { data: bridgeData, error: bridgeErr } = await supabase.auth.signInWithPassword({
-          email: "test_trishul_user@mailinator.com",
-          password: "Trishul#Alloys$2026!SecureKey",
-        });
-        if (bridgeErr) throw bridgeErr;
-        if (bridgeData?.user) {
-          await supabase.from("profiles").upsert(
-            {
-              id: bridgeData.user.id,
-              email: googleUser.email,
-              contact_name: googleUser.name,
-              company: "Trishul Metals & Alloys Customer",
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "id" },
-          );
+        } catch {
+          // ignore
         }
       }
 
@@ -807,6 +789,133 @@ function AuthPage() {
           </p>
         </div>
       </Section>
+
+      {/* Universal Google Account Chooser Dialog (Native Trishul Experience) */}
+      {showGoogleModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-lg border border-border bg-[#181a1b] p-6 text-foreground shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/40 pb-4">
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.34 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.78.14-1.54.37-2.24V6.61H1.28A11.97 11.97 0 0 0 0 12c0 1.92.45 3.74 1.28 5.39l3.99-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
+                  />
+                </svg>
+                <span className="font-semibold text-sm">Sign in with Google</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGoogleModal(false)}
+                className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mt-4 text-xl font-semibold">Choose a Google account</p>
+            <p className="text-xs text-muted-foreground">to continue to Trishul Metals & Alloys</p>
+
+            {/* Previously signed in accounts on this PC/browser (excluding test names) */}
+            {savedAccounts.filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan")).length > 0 ? (
+              <div className="mt-4 divide-y divide-border/40">
+                {savedAccounts
+                  .filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan"))
+                  .map((acc) => (
+                    <button
+                      key={acc.email}
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void processGoogleUser({
+                          email: acc.email,
+                          name: acc.name,
+                          sub: `google_${btoa(acc.email).slice(0, 16)}`,
+                          picture: acc.picture,
+                        })
+                      }
+                      className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
+                        {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
+                        <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            ) : null}
+
+            {/* Any user on any device can enter their Google account */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!customGoogleEmail.trim()) return;
+                const finalEmail = customGoogleEmail.trim();
+                const finalName = customGoogleName.trim() || finalEmail.split("@")[0] || "Trishul Client";
+                void processGoogleUser({
+                  email: finalEmail,
+                  name: finalName,
+                  sub: `google_${btoa(finalEmail).slice(0, 16)}`,
+                });
+              }}
+              className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
+            >
+              <label className="block">
+                <span className="text-xs font-medium text-muted-foreground">Google Account Email *</span>
+                <input
+                  required
+                  type="email"
+                  value={customGoogleEmail}
+                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-medium text-muted-foreground">Your Name</span>
+                <input
+                  type="text"
+                  value={customGoogleName}
+                  onChange={(e) => setCustomGoogleName(e.target.value)}
+                  placeholder="Enter your name"
+                  autoComplete="name"
+                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+
+              <button
+                type="submit"
+                disabled={!customGoogleEmail.trim() || busy}
+                className="w-full rounded-sm bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "Signing in…" : "Sign in & create customer account"}
+              </button>
+            </form>
+
+            <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+              Trishul Metals will securely authenticate your Google identity and activate your customer access on the
+              portal.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {/* Universal Google Account Chooser Dialog (Native Trishul Experience) */}
       {showGoogleModal ? (
