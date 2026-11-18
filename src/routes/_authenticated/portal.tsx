@@ -74,11 +74,16 @@ function PortalPage() {
   const rfqs = data.rfqs;
   const orders = data.orders;
   const docs = data.documents;
-  const displayEmail = (typeof window !== "undefined" && sessionStorage.getItem("trishul-auth-email")) || data.email;
+  const displayEmail =
+    data.email ||
+    (typeof window !== "undefined" &&
+      (sessionStorage.getItem("trishul-auth-email") || localStorage.getItem("trishul-active-user"))) ||
+    "customer@trishulmetal.com";
 
   async function signOut() {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("trishul-auth-email");
+      sessionStorage.removeItem("trishul-auth-next");
       localStorage.removeItem("trishul-active-user");
     }
     await supabase.auth.signOut();

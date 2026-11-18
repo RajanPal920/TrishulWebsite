@@ -31,7 +31,6 @@ import { Route as StockRouteImport } from './routes/stock'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
-import { Route as AuthGoogleRouteImport } from './routes/auth_.google'
 import { Route as IndustriesIndexRouteImport } from './routes/industries.index'
 import { Route as IndustriesSlugRouteImport } from './routes/industries.$slug'
 import { Route as MaterialsIndexRouteImport } from './routes/materials.index'
@@ -153,11 +152,6 @@ const AuthenticatedPortalRoute = AuthenticatedPortalRouteImport.update({
   path: '/portal',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthGoogleRoute = AuthGoogleRouteImport.update({
-  id: '/auth_/google',
-  path: '/auth/google',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndustriesIndexRoute = IndustriesIndexRouteImport.update({
   id: '/industries/',
   path: '/industries/',
@@ -236,7 +230,6 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
   '/portal': typeof AuthenticatedPortalRoute
-  '/auth/google': typeof AuthGoogleRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -271,7 +264,6 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
   '/portal': typeof AuthenticatedPortalRoute
-  '/auth/google': typeof AuthGoogleRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/rfq/confirmation': typeof RfqConfirmationRoute
@@ -307,7 +299,6 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
   '/_authenticated/portal': typeof AuthenticatedPortalRoute
-  '/auth_/google': typeof AuthGoogleRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -344,7 +335,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tools'
     | '/portal'
-    | '/auth/google'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -379,7 +369,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tools'
     | '/portal'
-    | '/auth/google'
     | '/industries/$slug'
     | '/products/$slug'
     | '/rfq/confirmation'
@@ -414,7 +403,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tools'
     | '/_authenticated/portal'
-    | '/auth_/google'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -450,7 +438,6 @@ export interface RootRouteChildren {
   StockRoute: typeof StockRoute
   TermsRoute: typeof TermsRoute
   ToolsRoute: typeof ToolsRoute
-  AuthGoogleRoute: typeof AuthGoogleRoute
   IndustriesSlugRoute: typeof IndustriesSlugRoute
   MaterialsSlugRoute: typeof MaterialsSlugRouteWithChildren
   ProductsSlugRoute: typeof ProductsSlugRoute
@@ -618,13 +605,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPortalRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/auth_/google': {
-      id: '/auth_/google'
-      path: '/auth/google'
-      fullPath: '/auth/google'
-      preLoaderRoute: typeof AuthGoogleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/industries/': {
       id: '/industries/'
       path: '/industries'
@@ -752,7 +732,6 @@ const rootRouteChildren: RootRouteChildren = {
   StockRoute: StockRoute,
   TermsRoute: TermsRoute,
   ToolsRoute: ToolsRoute,
-  AuthGoogleRoute: AuthGoogleRoute,
   IndustriesSlugRoute: IndustriesSlugRoute,
   MaterialsSlugRoute: MaterialsSlugRouteWithChildren,
   ProductsSlugRoute: ProductsSlugRoute,
