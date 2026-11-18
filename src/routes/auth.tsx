@@ -201,7 +201,12 @@ function AuthPage() {
     if (typeof window !== "undefined") {
       setSavedAccounts(getStoredGoogleAccounts());
     }
-  }, []);
+    // Always initialize input fields to empty on mount
+    setEmail("");
+    setPassword("");
+    setCompany("");
+    setContactName("");
+  }, [mode]);
 
   // 1. Monitor incoming auth redirect tokens (hash) and existing session
   useEffect(() => {
@@ -683,17 +688,24 @@ function AuthPage() {
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-4" autoComplete="off" noValidate>
+            {/* Browser autofill absorber to prevent browser password managers from pre-filling fields on reload */}
+            <div className="hidden" aria-hidden="true">
+              <input type="text" name="fake_email_sink" tabIndex={-1} autoComplete="off" defaultValue="" />
+              <input type="password" name="fake_password_sink" tabIndex={-1} autoComplete="off" defaultValue="" />
+            </div>
+
             {mode === "signup" ? (
               <>
                 <label className="block">
                   <span className="eyebrow">Company *</span>
                   <input
                     required
+                    name="trishul_company"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
                     className={fieldClass}
-                    autoComplete="organization"
+                    autoComplete="off"
                     placeholder="Enter your company name"
                   />
                 </label>
@@ -701,10 +713,11 @@ function AuthPage() {
                   <span className="eyebrow">Contact name *</span>
                   <input
                     required
+                    name="trishul_contact_name"
                     value={contactName}
                     onChange={(e) => setContactName(e.target.value)}
                     className={fieldClass}
-                    autoComplete="name"
+                    autoComplete="off"
                     placeholder="Enter your name"
                   />
                 </label>
@@ -716,10 +729,11 @@ function AuthPage() {
               <input
                 required
                 type="email"
+                name="trishul_cust_email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={fieldClass}
-                autoComplete="email"
+                autoComplete="off"
                 placeholder="Enter your email"
               />
             </label>
@@ -730,10 +744,11 @@ function AuthPage() {
                 required
                 minLength={8}
                 type="password"
+                name="trishul_cust_password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={fieldClass}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="new-password"
                 placeholder="Enter your password"
               />
             </label>
@@ -771,14 +786,14 @@ function AuthPage() {
               >
                 Forgot your password?
               </button>
-              <button
+              {/* <button
                 type="button"
                 onClick={() => void sendMagicLink()}
                 disabled={busy}
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
                 Send 1-click login link to email
-              </button>
+              </button> */}
             </div>
           ) : null}
 
