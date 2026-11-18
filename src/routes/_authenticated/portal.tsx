@@ -1,6 +1,6 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Breadcrumbs, Section, SectionHead, SpecTable } from "@/components/site/parts";
 import { company } from "@/data/company";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,29 +14,7 @@ export const Route = createFileRoute("/_authenticated/portal")({
     try {
       return await getPortalData();
     } catch {
-      return {
-        email:
-          (typeof window !== "undefined" &&
-            (sessionStorage.getItem("trishul-auth-email") || localStorage.getItem("trishul-active-user"))) ||
-          "customer@trishulmetal.com",
-        profile: {
-          id: "verified-customer",
-          email:
-            (typeof window !== "undefined" &&
-              (sessionStorage.getItem("trishul-auth-email") || localStorage.getItem("trishul-active-user"))) ||
-            "customer@trishulmetal.com",
-          company: "Trishul Metals & Alloys Customer",
-          contact_name: "Valued Customer",
-          phone: null,
-          country: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        orders: [],
-        lines: [],
-        documents: [],
-        rfqs: [],
-      };
+      throw redirect({ to: "/auth", search: { next: "/portal" } });
     }
   },
   head: () => ({ meta: [
@@ -63,22 +41,11 @@ function PortalPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("trishul-just-signed-in") === "true") {
-      sessionStorage.removeItem("trishul-just-signed-in");
-      setNotice("✓ Profile created successfully on Trishul Metals & Alloys! You are now signed in to your customer dashboard.");
-    }
-  }, []);
-
   const profile = data.profile;
   const rfqs = data.rfqs;
   const orders = data.orders;
   const docs = data.documents;
-  const displayEmail =
-    data.email ||
-    (typeof window !== "undefined" &&
-      (sessionStorage.getItem("trishul-auth-email") || localStorage.getItem("trishul-active-user"))) ||
-    "customer@trishulmetal.com";
+  const displayEmail = data.email || profile?.email || "";
 
   async function signOut() {
     if (typeof window !== "undefined") {

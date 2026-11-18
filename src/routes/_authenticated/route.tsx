@@ -4,16 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    // 1. Check client storage for active verified Google/customer session
-    if (typeof window !== "undefined") {
-      const activeEmail =
-        sessionStorage.getItem("trishul-auth-email") || localStorage.getItem("trishul-active-user");
-      if (activeEmail) {
-        return { user: { id: "verified-customer", email: activeEmail } };
-      }
-    }
-
-    // 2. Check active Supabase session
+    // 1. Verify active Supabase session
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.user) {
@@ -23,7 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
       // ignore
     }
 
-    // 3. Check Supabase user
+    // 2. Fallback to getUser() verification
     try {
       const { data, error } = await supabase.auth.getUser();
       if (!error && data?.user) {
@@ -31,6 +22,13 @@ export const Route = createFileRoute("/_authenticated")({
       }
     } catch {
       // ignore
+    }
+
+    // Not authenticated: clear any stale client storage and redirect to /auth
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("trishul-auth-email");
+      sessionStorage.removeItem("trishul-auth-next");
+      localStorage.removeItem("trishul-active-user");
     }
 
     throw redirect({ to: "/auth", search: { next: "/portal" } });

@@ -9,16 +9,23 @@ export const getPortalData = createServerFn({ method: "GET" })
     const email = identity.user?.email;
     if (identityError || !email) throw new Error("Your session could not be verified.");
 
-    const metadata = identity.user.user_metadata as Record<string, unknown>;
+    const metadata = (identity.user.user_metadata as Record<string, unknown>) || {};
     const company = typeof metadata["company_name"] === "string" ? metadata["company_name"] : "";
-    const contactName = typeof metadata["contact_name"] === "string" ? metadata["contact_name"] : "";
+    const contactName =
+      typeof metadata["contact_name"] === "string"
+        ? metadata["contact_name"]
+        : typeof metadata["full_name"] === "string"
+          ? metadata["full_name"]
+          : typeof metadata["name"] === "string"
+            ? metadata["name"]
+            : "";
     await context.supabase.from("profiles").upsert(
       { id: context.userId, email, company, contact_name: contactName, updated_at: new Date().toISOString() },
       { onConflict: "id", ignoreDuplicates: true },
     );
 
     const [profile, orders, lines, docs, rfqs] = await Promise.all([
-      context.supabase.from("profiles").select("*").single(),
+      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
       context.supabase.from("client_orders").select("*").order("created_at", { ascending: false }),
       context.supabase.from("client_order_lines").select("*"),
       context.supabase.from("client_documents").select("*").order("issued_on", { ascending: false }),
