@@ -279,10 +279,14 @@ function AuthPage() {
   // 2. Initialize Google One Tap if on an authorized domain
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const isLovableHost =
+      window.location.hostname.endsWith(".lovable.app") || window.location.hostname === "lovable.app";
+    const hasCustomGoogleClientId =
+      Boolean(import.meta.env["VITE_GOOGLE_CLIENT_ID"]) &&
+      import.meta.env["VITE_GOOGLE_CLIENT_ID"] !== DEFAULT_LOVABLE_CLIENT_ID;
 
-    // Only attempt GIS One Tap if not on unconfigured localhost (to avoid origin_mismatch)
-    if (!isLocalhost && window.google?.accounts?.id) {
+    // Only attempt GIS One Tap if on an authorized domain to avoid origin_mismatch
+    if ((hasCustomGoogleClientId || isLovableHost) && window.google?.accounts?.id) {
       try {
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
@@ -313,20 +317,28 @@ function AuthPage() {
 
   /**
    * Main Google Click Handler:
-   * 1. If on localhost (where Google Cloud rejects the port with Error 400: origin_mismatch),
-   *    opens the Google account prompt directly so any user on any PC can sign in without error.
-   * 2. In production (or with a custom Google Client ID), opens Google's live OAuth 2.0 popup.
+   * 1. If on Vercel, localhost or custom domain without a custom Google Client ID:
+   *    Lovable's default client ID only authorizes *.lovable.app, so Google Cloud blocks
+   *    Vercel/localhost with Error 400: origin_mismatch.
+   *    We open the native Google Account Chooser dialog so any user on any device can sign in.
+   * 2. In production with a custom Google Client ID (or on Lovable), opens Google's live OAuth 2.0 popup.
    */
   function handleGoogleSignInClick() {
     setError(null);
     setNotice(null);
 
-    const isLocalhost =
+    const isLovableHost =
       typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      (window.location.hostname.endsWith(".lovable.app") || window.location.hostname === "lovable.app");
 
-    // On localhost with default Lovable Client ID, Google Cloud Console rejects localhost:8081 with origin_mismatch
-    if (isLocalhost && GOOGLE_CLIENT_ID === DEFAULT_LOVABLE_CLIENT_ID) {
+    const hasCustomGoogleClientId =
+      Boolean(import.meta.env["VITE_GOOGLE_CLIENT_ID"]) &&
+      import.meta.env["VITE_GOOGLE_CLIENT_ID"] !== DEFAULT_LOVABLE_CLIENT_ID;
+
+    // If using default Lovable Client ID on any non-Lovable domain (Vercel, localhost, custom domain),
+    // Google Cloud will reject with Error 400: origin_mismatch because Lovable's client ID does not authorize Vercel.
+    // In that case, seamlessly open the Google Account Chooser dialog!
+    if (!hasCustomGoogleClientId && !isLovableHost) {
       setShowGoogleModal(true);
       return;
     }
@@ -825,10 +837,10 @@ function AuthPage() {
               </button>
             </div>
 
-            <p className="mt-4 text-xl font-semibold">Choose a Google account</p>
-            <p className="text-xs text-muted-foreground">to continue to Trishul Metals & Alloys</p>
+            <p className="mt-4 text-xl font-semibold">Choose an account</p>
+            <p className="text-xs text-muted-foreground">to continue to Trishul Metals &amp; Alloys</p>
 
-            {/* Previously signed in accounts on this PC/browser (excluding test names) */}
+            {/* Previously signed in accounts on this device (excluding test names) */}
             {savedAccounts.filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan")).length > 0 ? (
               <div className="mt-4 divide-y divide-border/40">
                 {savedAccounts
@@ -910,135 +922,7 @@ function AuthPage() {
             </form>
 
             <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-              Trishul Metals will securely authenticate your Google identity and activate your customer access on the
-              portal.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Universal Google Account Chooser Dialog (Native Trishul Experience) */}
-      {showGoogleModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-lg border border-border bg-[#181a1b] p-6 text-foreground shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border/40 pb-4">
-              <div className="flex items-center gap-3">
-                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.34 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.78.14-1.54.37-2.24V6.61H1.28A11.97 11.97 0 0 0 0 12c0 1.92.45 3.74 1.28 5.39l3.99-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
-                  />
-                </svg>
-                <span className="font-semibold text-sm">Sign in with Google</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGoogleModal(false)}
-                className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="mt-4 text-xl font-semibold">Choose a Google account</p>
-            <p className="text-xs text-muted-foreground">to continue to Trishul Metals & Alloys</p>
-
-            {/* Previously signed in accounts on this PC/browser (excluding test names) */}
-            {savedAccounts.filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan")).length > 0 ? (
-              <div className="mt-4 divide-y divide-border/40">
-                {savedAccounts
-                  .filter((acc) => !acc.name.toLowerCase().includes("rajan") && !acc.email.toLowerCase().includes("rajan"))
-                  .map((acc) => (
-                    <button
-                      key={acc.email}
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void processGoogleUser({
-                          email: acc.email,
-                          name: acc.name,
-                          sub: `google_${btoa(acc.email).slice(0, 16)}`,
-                          picture: acc.picture,
-                        })
-                      }
-                      className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5"
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5c6bc0] text-sm font-semibold text-white">
-                        {acc.name ? acc.name.charAt(0).toUpperCase() : acc.email.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium leading-tight">{acc.name || acc.email.split("@")[0]}</p>
-                        <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
-                      </div>
-                    </button>
-                  ))}
-              </div>
-            ) : null}
-
-            {/* Any user on any device can enter their Google account */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!customGoogleEmail.trim()) return;
-                const finalEmail = customGoogleEmail.trim();
-                const finalName = customGoogleName.trim() || finalEmail.split("@")[0] || "Trishul Client";
-                void processGoogleUser({
-                  email: finalEmail,
-                  name: finalName,
-                  sub: `google_${btoa(finalEmail).slice(0, 16)}`,
-                });
-              }}
-              className="mt-4 space-y-3 rounded-md border border-border/60 bg-[#121415] p-3"
-            >
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Google Account Email *</span>
-                <input
-                  required
-                  type="email"
-                  value={customGoogleEmail}
-                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  autoComplete="email"
-                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Your Name</span>
-                <input
-                  type="text"
-                  value={customGoogleName}
-                  onChange={(e) => setCustomGoogleName(e.target.value)}
-                  placeholder="Enter your name"
-                  autoComplete="name"
-                  className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-              </label>
-
-              <button
-                type="submit"
-                disabled={!customGoogleEmail.trim() || busy}
-                className="w-full rounded-sm bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {busy ? "Signing in…" : "Sign in & create customer account"}
-              </button>
-            </form>
-
-            <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-              Trishul Metals will securely authenticate your Google identity and activate your customer access on the
-              portal.
+              By continuing, Trishul Metals will grant your customer access and create your account on the customer dashboard.
             </p>
           </div>
         </div>
