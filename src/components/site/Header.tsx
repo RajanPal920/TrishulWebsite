@@ -163,7 +163,7 @@ export function Header() {
       </div>
 
       {/* Main Navbar */}
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-2.5 md:px-10 md:py-3">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 md:px-10 md:py-3">
         {/* Brand Logo - Made Prominent and Clean */}
         <Link
           to="/"
@@ -172,7 +172,7 @@ export function Header() {
         >
           <BrandLogo
             priority
-            className="h-14 sm:h-16 lg:h-20 w-auto max-w-[250px] sm:max-w-[320px] drop-shadow-sm"
+            className="h-11 sm:h-14 md:h-16 lg:h-20 w-auto max-w-[210px] sm:max-w-[280px] lg:max-w-[320px] drop-shadow-sm"
           />
         </Link>
 
@@ -227,13 +227,13 @@ export function Header() {
           <Link
             to="/auth"
             search={{ next: "/portal" }}
-            className="hidden sm:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
+            className="hidden lg:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
           >
             Customer login
           </Link>
           <Link
             to="/rfq"
-            className="rounded-sm bg-primary px-3.5 sm:px-4 py-1.5 text-xs xl:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 whitespace-nowrap"
+            className="hidden lg:inline-flex rounded-sm bg-primary px-3.5 sm:px-4 py-1.5 text-xs xl:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 whitespace-nowrap"
           >
             Request quote
           </Link>
@@ -243,9 +243,26 @@ export function Header() {
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-label="Toggle navigation"
-            className="rounded-sm border border-border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground hover:border-primary/60 lg:hidden"
+            className="flex items-center gap-1.5 rounded-sm border border-border/80 bg-card/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-foreground transition-all hover:border-primary hover:text-primary active:scale-95 lg:hidden"
           >
-            {open ? "Close" : "Menu"}
+            {open ? (
+              <>
+                <svg className="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span>Close</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <line x1="4" y1="12" x2="20" y2="12" />
+                  <line x1="4" y1="18" x2="20" y2="18" />
+                </svg>
+                <span>Menu</span>
+              </>
+            )}
           </button>
         </div>
       </div>
