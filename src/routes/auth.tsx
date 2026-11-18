@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Breadcrumbs, Section, SectionHead } from "@/components/site/parts";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 
 interface AuthSearch {
   next?: string;
@@ -88,8 +89,9 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
-  const [contactName, setContactName] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +100,9 @@ function AuthPage() {
     // Always initialize input fields to empty on mount or mode switch
     setEmail("");
     setPassword("");
+    setConfirmPassword("");
+    setFullName("");
     setCompany("");
-    setContactName("");
   }, [mode]);
 
   // Handle incoming OAuth redirects (both PKCE query code and implicit hash) + session listeners
@@ -211,7 +214,7 @@ function AuthPage() {
   /**
    * Main Google Login Click Handler:
    * Uses native Supabase Google OAuth with `prompt: 'select_account'`
-   * so every customer independently chooses their own Google account on their own device.
+   * with seamless fallback to Lovable Cloud Auth Broker if Supabase dashboard credentials are not yet saved.
    */
   async function handleGoogleSignInClick() {
     setError(null);
@@ -229,6 +232,7 @@ function AuthPage() {
           ? `${window.location.origin}/auth?next=${encodeURIComponent(targetNext)}`
           : undefined;
 
+      // 1. Attempt Supabase Native Google OAuth
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -241,14 +245,30 @@ function AuthPage() {
       });
 
       if (oauthError) {
-        if (
+        // If Supabase Google provider has not yet been enabled in Dashboard with Client ID/Secret,
+        // fall back smoothly to Lovable Cloud Auth Broker (which powers trishulmetal.lovable.app)
+        const isMissingConfig =
           oauthError.message?.toLowerCase().includes("missing oauth client id") ||
-          oauthError.message?.toLowerCase().includes("unsupported provider")
-        ) {
-          throw new Error(
-            "Google provider is not enabled in Supabase Authentication → Providers → Google. Please configure the Google Client ID and Client Secret in your Supabase Dashboard.",
-          );
+          oauthError.message?.toLowerCase().includes("unsupported provider") ||
+          (oauthError as { status?: number }).status === 400;
+
+        if (isMissingConfig) {
+          console.info("[auth] Supabase Google provider unconfigured in dashboard; using Lovable Cloud OAuth broker...");
+          const result = await lovable.auth.signInWithOAuth("google", {
+            ...(redirectTo ? { redirect_uri: redirectTo } : {}),
+            extraParams: { prompt: "select_account" },
+          });
+
+          if (result && "redirected" in result && result.redirected) {
+            return;
+          }
+
+          if (result && "error" in result && result.error) {
+            throw result.error;
+          }
+          return;
         }
+
         throw oauthError;
       }
 
@@ -270,12 +290,26 @@ function AuthPage() {
 
     try {
       if (mode === "signup") {
+        if (!fullName.trim()) {
+          throw new Error("Please enter your full name.");
+        }
+        if (password.length < 8) {
+          throw new Error("Password must be at least 8 characters long.");
+        }
+        if (password !== confirmPassword) {
+          throw new Error("Passwords do not match. Please re-enter your password.");
+        }
+
         const result = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth?next=${encodeURIComponent(next)}`,
-            data: { company_name: company.trim(), contact_name: contactName.trim() },
+            data: {
+              full_name: fullName.trim(),
+              contact_name: fullName.trim(),
+              company_name: company.trim() || "Trishul Metals & Alloys Customer",
+            },
           },
         });
 
@@ -291,7 +325,10 @@ function AuthPage() {
         }
 
         if (result.data.user) {
-          await ensureProfile(result.data.user);
+          await ensureProfile(result.data.user, {
+            contactName: fullName.trim(),
+            company: company.trim() || "Trishul Metals & Alloys Customer",
+          });
         }
 
         if (result.data.session) {
@@ -341,15 +378,22 @@ function AuthPage() {
 
   async function resetPassword() {
     setError(null);
-    if (!email) {
-      setError("Enter your work email first.");
+    if (!email.trim()) {
+      setError("Please enter your work email above to receive password reset instructions.");
       return;
     }
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (resetError) setError(resetError.message);
-    else setNotice("Password reset instructions are on their way to your inbox.");
+    setBusy(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) throw resetError;
+      setNotice(`Password reset instructions have been sent to ${email.trim()}. Please check your inbox.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reset instructions.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -438,27 +482,26 @@ function AuthPage() {
             {mode === "signup" ? (
               <>
                 <label className="block">
-                  <span className="eyebrow">Company *</span>
+                  <span className="eyebrow">Full name *</span>
                   <input
                     required
+                    name="trishul_full_name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className={fieldClass}
+                    autoComplete="name"
+                    placeholder="Enter your full name"
+                  />
+                </label>
+                <label className="block">
+                  <span className="eyebrow">Company name (Optional)</span>
+                  <input
                     name="trishul_company"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
                     className={fieldClass}
-                    autoComplete="off"
+                    autoComplete="organization"
                     placeholder="Enter your company name"
-                  />
-                </label>
-                <label className="block">
-                  <span className="eyebrow">Contact name *</span>
-                  <input
-                    required
-                    name="trishul_contact_name"
-                    value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
-                    className={fieldClass}
-                    autoComplete="off"
-                    placeholder="Enter your name"
                   />
                 </label>
               </>
@@ -473,7 +516,7 @@ function AuthPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={fieldClass}
-                autoComplete="off"
+                autoComplete="email"
                 placeholder="Enter your email"
               />
             </label>
@@ -488,10 +531,27 @@ function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={fieldClass}
-                autoComplete="new-password"
-                placeholder="Enter your password"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                placeholder={mode === "signup" ? "Create a password (min. 8 characters)" : "Enter your password"}
               />
             </label>
+
+            {mode === "signup" ? (
+              <label className="block">
+                <span className="eyebrow">Confirm password *</span>
+                <input
+                  required
+                  minLength={8}
+                  type="password"
+                  name="trishul_confirm_password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={fieldClass}
+                  autoComplete="new-password"
+                  placeholder="Confirm your password"
+                />
+              </label>
+            ) : null}
 
             {error ? (
               <p className="rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive" role="alert">
@@ -511,7 +571,9 @@ function AuthPage() {
               className="w-full rounded-sm bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {busy
-                ? "Please wait…"
+                ? mode === "signin"
+                  ? "Signing in to dashboard…"
+                  : "Creating customer account…"
                 : mode === "signin"
                   ? "Sign in to dashboard"
                   : "Create customer account"}
