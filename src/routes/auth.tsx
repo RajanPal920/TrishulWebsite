@@ -145,62 +145,30 @@ function AuthPage() {
     [loginWithGoogle, navigate, search.next, targetUrl]
   );
 
-  // Handle incoming OAuth redirects from Google or broker (#access_token=... or ?access_token=...)
+  // Handle incoming OAuth redirects from official Google OAuth (#access_token=... or #id_token=...)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // 1. Inspect URL Hash & Search Query for OAuth redirect response
     const hash = window.location.hash ? window.location.hash.substring(1) : "";
     const searchStr = window.location.search ? window.location.search.substring(1) : "";
     const hashParams = new URLSearchParams(hash);
     const searchParams = new URLSearchParams(searchStr);
 
+    const errParam = searchParams.get("error") || hashParams.get("error");
+    if (errParam) {
+      setError(decodeURIComponent(errParam));
+      return;
+    }
+
     const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
-    const providerToken = hashParams.get("provider_token") || searchParams.get("provider_token");
     const idToken = hashParams.get("id_token") || searchParams.get("id_token");
 
-    if (accessToken || providerToken || idToken) {
+    if (accessToken || idToken) {
       void completeGoogleSignIn({
         ...(accessToken ? { accessToken } : {}),
-        ...(providerToken ? { providerToken } : {}),
         ...(idToken ? { credential: idToken } : {}),
       });
     }
-
-    // 2. Listen for OAuth postMessage responses from popup
-    const handleAuthMessage = (event: MessageEvent) => {
-      const allowedOrigins = [
-        "https://oauth.lovable.app",
-        "https://lovable.dev",
-        "https://trishulmetal.lovable.app",
-        window.location.origin,
-      ];
-      if (!allowedOrigins.some((o) => event.origin === o)) return;
-
-      const data = event.data;
-      if (!data || typeof data !== "object") return;
-      if (data.type !== "authorization_response") return;
-
-      const resp = data.response;
-      if (!resp) return;
-
-      const msgAccessToken = resp.access_token || resp.accessToken;
-      const msgProviderToken = resp.provider_token;
-      const msgIdToken = resp.id_token || resp.idToken;
-
-      if (msgAccessToken || msgProviderToken || msgIdToken) {
-        void completeGoogleSignIn({
-          ...(msgAccessToken ? { accessToken: msgAccessToken } : {}),
-          ...(msgProviderToken ? { providerToken: msgProviderToken } : {}),
-          ...(msgIdToken ? { credential: msgIdToken } : {}),
-        });
-      }
-    };
-
-    window.addEventListener("message", handleAuthMessage);
-    return () => {
-      window.removeEventListener("message", handleAuthMessage);
-    };
   }, [completeGoogleSignIn]);
 
   // If already authenticated, redirect to destination
@@ -273,84 +241,29 @@ function AuthPage() {
 
     if (typeof window === "undefined") return;
 
-    let isInIframe = false;
-    try {
-      isInIframe = window.self !== window.top;
-    } catch {
-      isInIframe = true;
-    }
-
     const state =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : Math.random().toString(36).substring(2) + Date.now().toString(36);
 
-    const redirectUri = `${window.location.origin}/auth?next=${encodeURIComponent(targetUrl)}`;
-    const useDirectGoogleOAuth = import.meta.env["VITE_USE_DIRECT_GOOGLE_OAUTH"] === "true";
-
-    let targetUrlWithParams = "";
-
-    if (useDirectGoogleOAuth && GOOGLE_CLIENT_ID) {
-      targetUrlWithParams =
-        `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=token` +
-        `&scope=${encodeURIComponent("openid email profile")}` +
-        `&prompt=select_account` +
-        `&state=${encodeURIComponent(state)}`;
-    } else {
-      const isLovableHost = window.location.hostname.includes("lovable.app");
-      const brokerUrl = isLovableHost ? "/~oauth/initiate" : "https://trishulmetal.lovable.app/~oauth/initiate";
-
-      const params = new URLSearchParams({
-        provider: "google",
-        redirect_uri: redirectUri,
-        state,
-        prompt: "select_account",
-      });
-
-      if (isInIframe) {
-        params.set("response_mode", "web_message");
-      }
-
-      targetUrlWithParams = `${brokerUrl}?${params.toString()}`;
-    }
-
-    // Dimensions for Google OAuth popup
-    const width = 500;
-    const height = 650;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-
-    let popup: Window | null = null;
     try {
-      popup = window.open(
-        targetUrlWithParams,
-        "google_oauth",
-        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no`
-      );
-    } catch (popupErr) {
-      console.warn("[Google OAuth popup error]:", popupErr);
-    }
+      sessionStorage.setItem("trishul_oauth_state", state);
+    } catch {}
 
-    // If popup was blocked by browser or mobile environment, perform full page redirect
-    if (!popup || popup.closed || typeof popup.closed === "undefined") {
-      window.location.href = targetUrlWithParams;
-      return;
-    }
+    // Pure official Google OAuth 2.0 Web Redirect (Never through lovable.app)
+    const redirectUri = `${window.location.origin}/auth`;
 
-    // Monitor when the popup is closed
-    const checkInterval = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkInterval);
-        setBusy(false);
-      }
-    }, 500);
+    const googleAuthUrl =
+      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=token%20id_token` +
+      `&scope=${encodeURIComponent("openid email profile")}` +
+      `&prompt=select_account` +
+      `&state=${encodeURIComponent(state)}` +
+      `&nonce=${encodeURIComponent(state)}`;
 
-    setTimeout(() => {
-      clearInterval(checkInterval);
-    }, 180000);
+    window.location.href = googleAuthUrl;
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {

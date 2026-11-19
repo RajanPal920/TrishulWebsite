@@ -171,6 +171,180 @@ function decodeJwtPayload(token) {
   return null;
 }
 
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.VITE_GOOGLE_CLIENT_ID ||
+  '288002387414-6cvdo0ftcmsi36l9npigsaoj3m86oedc.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+
+/**
+ * GET /api/auth/google
+ * Official Google OAuth 2.0 authorization redirect (No Lovable or third-party brokers)
+ */
+router.get('/google', (req, res) => {
+  const host = req.get('host') || 'localhost:8080';
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${protocol}://${host}/api/auth/google/callback`;
+
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+  });
+
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+    `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
+    `&response_type=code` +
+    `&scope=${encodeURIComponent('openid email profile')}` +
+    `&prompt=select_account` +
+    `&state=${encodeURIComponent(state)}`;
+
+  return res.redirect(authUrl);
+});
+
+/**
+ * GET /api/auth/google/callback
+ * Official Google OAuth 2.0 backend callback
+ */
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.warn('[Google OAuth Notice]:', oauthError);
+      return res.redirect(`/auth?error=${encodeURIComponent('Google authentication was cancelled or access denied.')}`);
+    }
+
+    if (!code) {
+      return res.redirect(`/auth?error=${encodeURIComponent('No authorization code returned from Google.')}`);
+    }
+
+    const host = req.get('host') || 'localhost:8080';
+    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${protocol}://${host}/api/auth/google/callback`;
+
+    let idToken = null;
+    let accessToken = null;
+
+    if (GOOGLE_CLIENT_SECRET) {
+      try {
+        const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code: String(code),
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            redirect_uri: callbackUrl,
+            grant_type: 'authorization_code',
+          }),
+        });
+
+        if (tokenResp.ok) {
+          const tokenData = await tokenResp.json();
+          idToken = tokenData.id_token;
+          accessToken = tokenData.access_token;
+        } else {
+          console.warn('[Google Token Exchange Warning]:', await tokenResp.text());
+        }
+      } catch (tokenErr) {
+        console.warn('[Google Token Fetch Error]:', tokenErr.message);
+      }
+    }
+
+    let googleId = null;
+    let email = null;
+    let name = null;
+    let picture = null;
+
+    if (idToken) {
+      try {
+        const ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        if (payload) {
+          googleId = payload.sub;
+          email = payload.email;
+          name = payload.name;
+          picture = payload.picture;
+        }
+      } catch {
+        const decoded = decodeJwtPayload(idToken);
+        if (decoded) {
+          googleId = decoded.sub || decoded.id;
+          email = decoded.email;
+          name = decoded.name;
+          picture = decoded.picture;
+        }
+      }
+    }
+
+    if (!email && accessToken) {
+      try {
+        const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (resp.ok) {
+          const info = await resp.json();
+          googleId = info.sub;
+          email = info.email;
+          name = info.name;
+          picture = info.picture;
+        }
+      } catch {}
+    }
+
+    if (!email) {
+      // If code exchange is pending client secret configuration, redirect to client token flow
+      return res.redirect(`/auth?error=${encodeURIComponent('Please configure GOOGLE_CLIENT_SECRET in .env for web server flow, or use browser token flow.')}`);
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = (name || cleanEmail.split('@')[0] || 'Customer').trim();
+
+    // Check if user exists in SQLite
+    let existingUser = await get(
+      'SELECT id, email, full_name, company, phone, role, avatar_url, last_login_at, created_at FROM users WHERE email = ? OR google_id = ?',
+      [cleanEmail, googleId]
+    );
+
+    let userId;
+    const now = new Date().toISOString();
+
+    if (existingUser) {
+      userId = existingUser.id;
+      await run(
+        `UPDATE users
+         SET google_id = COALESCE(google_id, ?),
+             avatar_url = COALESCE(?, avatar_url),
+             last_login_at = ?,
+             updated_at = ?
+         WHERE id = ?`,
+        [googleId, picture, now, now, userId]
+      );
+    } else {
+      userId = crypto.randomUUID();
+      await run(
+        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, last_login_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'customer', ?, ?, ?)`,
+        [userId, cleanEmail, cleanName, googleId, picture, now, now, now]
+      );
+    }
+
+    await createSession(userId, res);
+    return res.redirect('/portal');
+  } catch (err) {
+    console.error('[Google OAuth Callback Error]:', err);
+    return res.redirect(`/auth?error=${encodeURIComponent('Failed to complete Google authentication.')}`);
+  }
+});
+
 /**
  * POST /api/auth/google
  * Handles Google Sign-In token verification & SQLite account provisioning
