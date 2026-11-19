@@ -3,8 +3,6 @@
  * Connects directly to Node.js / Express / SQLite backend
  */
 
-import { registerCustomerFn, loginCustomerFn, googleAuthFn } from './auth.functions';
-
 export interface User {
   id: string;
   email: string;
@@ -136,33 +134,17 @@ export const api = {
       company?: string;
       phone?: string;
     }): Promise<{ success: boolean; user: User }> {
-      try {
-        const res = await registerCustomerFn({ data: payload });
-        return { success: res.success, user: res.user };
-      } catch (err: any) {
-        if (err?.message && !err.message.includes('fetch') && !err.message.includes('502')) {
-          throw err;
-        }
-        return request<{ success: boolean; user: User }>('/api/auth/register', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      return request<{ success: boolean; user: User }>('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     },
 
     async login(payload: { email: string; password: string }): Promise<{ success: boolean; user: User }> {
-      try {
-        const res = await loginCustomerFn({ data: payload });
-        return { success: res.success, user: res.user };
-      } catch (err: any) {
-        if (err?.message && !err.message.includes('fetch') && !err.message.includes('502')) {
-          throw err;
-        }
-        return request<{ success: boolean; user: User }>('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      return request<{ success: boolean; user: User }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     },
 
     async google(payload: {
@@ -171,18 +153,10 @@ export const api = {
       providerToken?: string;
       userInfo?: { email: string; name?: string; picture?: string; sub?: string };
     }): Promise<{ success: boolean; user: User }> {
-      try {
-        const res = await googleAuthFn({ data: payload });
-        return { success: res.success, user: res.user };
-      } catch (err: any) {
-        if (err?.message && !err.message.includes('fetch') && !err.message.includes('502')) {
-          throw err;
-        }
-        return request<{ success: boolean; user: User }>('/api/auth/google', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      return request<{ success: boolean; user: User }>('/api/auth/google', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     },
 
     async me(): Promise<{ authenticated: boolean; user: User | null }> {

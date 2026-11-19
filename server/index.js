@@ -39,9 +39,14 @@ app.use(express.urlencoded({ extended: true }));
 // Rate limiting on sensitive auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60, // Limit each IP to 60 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 100 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
+  keyGenerator: (req) => {
+    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || '127.0.0.1';
+  },
+  skip: (req) => process.env.NODE_ENV !== 'production' || req.ip === '127.0.0.1' || req.ip === '::1',
   message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
 });
 

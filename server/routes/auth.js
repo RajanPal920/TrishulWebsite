@@ -178,21 +178,41 @@ const GOOGLE_CLIENT_ID =
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 /**
+ * Standard trusted callback URL resolver
+ * Never derives from untrusted request headers
+ */
+function getTrustedCallbackUrl() {
+  if (process.env.GOOGLE_CALLBACK_URL && process.env.GOOGLE_CALLBACK_URL.trim()) {
+    return process.env.GOOGLE_CALLBACK_URL.trim();
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://trishulmetal.lovable.app/api/auth/google/callback';
+  }
+  return 'http://localhost:8080/api/auth/google/callback';
+}
+
+/**
  * GET /api/auth/google
  * Official Google OAuth 2.0 authorization redirect (No Lovable or third-party brokers)
+ * Generates cryptographic state and PKCE challenge (RFC 7636)
  */
 router.get('/google', (req, res) => {
-  const host = req.get('host') || 'localhost:8080';
-  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-  const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${protocol}://${host}/api/auth/google/callback`;
+  const callbackUrl = getTrustedCallbackUrl();
 
-  const state = crypto.randomBytes(16).toString('hex');
-  res.cookie('oauth_state', state, {
+  const state = crypto.randomBytes(24).toString('hex');
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
+  const cookieConfig = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 10 * 60 * 1000,
-  });
+    path: '/',
+    maxAge: 10 * 60 * 1000, // 10 minutes
+  };
+
+  res.cookie('oauth_state', state, cookieConfig);
+  res.cookie('oauth_verifier', codeVerifier, cookieConfig);
 
   const authUrl =
     `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -201,7 +221,9 @@ router.get('/google', (req, res) => {
     `&response_type=code` +
     `&scope=${encodeURIComponent('openid email profile')}` +
     `&prompt=select_account` +
-    `&state=${encodeURIComponent(state)}`;
+    `&state=${encodeURIComponent(state)}` +
+    `&code_challenge=${encodeURIComponent(codeChallenge)}` +
+    `&code_challenge_method=S256`;
 
   return res.redirect(authUrl);
 });
@@ -216,44 +238,70 @@ router.get('/google/callback', async (req, res) => {
 
     if (oauthError) {
       console.warn('[Google OAuth Notice]:', oauthError);
+      res.clearCookie('oauth_state', { path: '/' });
+      res.clearCookie('oauth_verifier', { path: '/' });
       return res.redirect(`/auth?error=${encodeURIComponent('Google authentication was cancelled or access denied.')}`);
     }
 
     if (!code) {
+      res.clearCookie('oauth_state', { path: '/' });
+      res.clearCookie('oauth_verifier', { path: '/' });
       return res.redirect(`/auth?error=${encodeURIComponent('No authorization code returned from Google.')}`);
     }
 
-    const host = req.get('host') || 'localhost:8080';
-    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-    const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${protocol}://${host}/api/auth/google/callback`;
+    // State verification (CSRF Protection)
+    const savedState = req.cookies?.oauth_state;
+    if (!state || !savedState || state !== savedState) {
+      console.warn('[Google OAuth Warning]: State mismatch or expired session state.');
+      res.clearCookie('oauth_state', { path: '/' });
+      res.clearCookie('oauth_verifier', { path: '/' });
+      return res.redirect(
+        `/auth?error=${encodeURIComponent('Authentication session expired or security verification failed. Please try again.')}`
+      );
+    }
+
+    const callbackUrl = getTrustedCallbackUrl();
+    const codeVerifier = req.cookies?.oauth_verifier;
+
+    // Clean up temporary OAuth cookies
+    res.clearCookie('oauth_state', { path: '/' });
+    res.clearCookie('oauth_verifier', { path: '/' });
 
     let idToken = null;
     let accessToken = null;
 
-    if (GOOGLE_CLIENT_SECRET) {
-      try {
-        const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            code: String(code),
-            client_id: GOOGLE_CLIENT_ID,
-            client_secret: GOOGLE_CLIENT_SECRET,
-            redirect_uri: callbackUrl,
-            grant_type: 'authorization_code',
-          }),
-        });
+    // Exchange authorization code for tokens
+    try {
+      const tokenBody = new URLSearchParams({
+        code: String(code),
+        client_id: GOOGLE_CLIENT_ID,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+      });
 
-        if (tokenResp.ok) {
-          const tokenData = await tokenResp.json();
-          idToken = tokenData.id_token;
-          accessToken = tokenData.access_token;
-        } else {
-          console.warn('[Google Token Exchange Warning]:', await tokenResp.text());
-        }
-      } catch (tokenErr) {
-        console.warn('[Google Token Fetch Error]:', tokenErr.message);
+      if (GOOGLE_CLIENT_SECRET) {
+        tokenBody.append('client_secret', GOOGLE_CLIENT_SECRET);
       }
+      if (codeVerifier) {
+        tokenBody.append('code_verifier', codeVerifier);
+      }
+
+      const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: tokenBody,
+      });
+
+      if (tokenResp.ok) {
+        const tokenData = await tokenResp.json();
+        idToken = tokenData.id_token;
+        accessToken = tokenData.access_token;
+      } else {
+        const errText = await tokenResp.text();
+        console.warn('[Google Token Exchange Warning]:', errText);
+      }
+    } catch (tokenErr) {
+      console.warn('[Google Token Fetch Error]:', tokenErr.message);
     }
 
     let googleId = null;

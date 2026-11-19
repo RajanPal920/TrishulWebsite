@@ -241,29 +241,9 @@ function AuthPage() {
 
     if (typeof window === "undefined") return;
 
-    const state =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).substring(2) + Date.now().toString(36);
-
-    try {
-      sessionStorage.setItem("trishul_oauth_state", state);
-    } catch {}
-
-    // Pure official Google OAuth 2.0 Web Redirect (Never through lovable.app)
-    const redirectUri = `${window.location.origin}/auth`;
-
-    const googleAuthUrl =
-      `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&response_type=token%20id_token` +
-      `&scope=${encodeURIComponent("openid email profile")}` +
-      `&prompt=select_account` +
-      `&state=${encodeURIComponent(state)}` +
-      `&nonce=${encodeURIComponent(state)}`;
-
-    window.location.href = googleAuthUrl;
+    // Direct to official backend Google OAuth 2.0 authorization endpoint
+    // Uses trusted GOOGLE_CALLBACK_URL, PKCE (RFC 7636), and CSRF state validation
+    window.location.href = "/api/auth/google";
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
