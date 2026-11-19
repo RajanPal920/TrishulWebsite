@@ -59,18 +59,41 @@ router.post('/rfq', async (req, res) => {
     const name = (contact_name || contactName || req.user?.full_name || '').trim();
     const mail = (email || req.user?.email || '').trim().toLowerCase();
     const comp = company || req.user?.company || null;
-    const ph = phone || req.user?.phone || null;
+    const ph = (phone || req.user?.phone || '').trim();
     const cntry = country || null;
     const items = line_items || lineItems || [];
 
-    if (!mail) {
-      return res.status(400).json({ error: 'Email is required for RFQ submission.' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!mail || !emailRegex.test(mail)) {
+      return res.status(400).json({ error: 'A valid email address is required for RFQ submission.' });
+    }
+
+    if (ph) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(ph)) {
+        return res.status(400).json({
+          error: 'Please enter a valid phone number with country code (e.g. +91 98200 12345).',
+        });
+      }
     }
 
     const rfqId = crypto.randomUUID();
     const rfqNumber = `TM-RFQ-${Date.now().toString().slice(-6)}`;
     const confirmationToken = crypto.randomUUID();
     const now = new Date().toISOString();
+
+    // 1. Identify customer ID: from active session OR by looking up registered user by email
+    let userId = req.user ? req.user.id : null;
+    if (!userId && mail) {
+      try {
+        const existingUser = await get('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [mail]);
+        if (existingUser?.id) {
+          userId = existingUser.id;
+        }
+      } catch {
+        // Safe to ignore lookup error
+      }
+    }
 
     await run(
       `INSERT INTO rfq_requests (
@@ -81,13 +104,13 @@ router.post('/rfq', async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?)`,
       [
         rfqId,
-        req.user ? req.user.id : null,
+        userId,
         rfqNumber,
         confirmationToken,
         comp || 'Trishul Customer',
         name || 'Customer',
         mail,
-        ph,
+        ph || null,
         cntry,
         req.body.incoterm || null,
         req.body.delivery_port || req.body.deliveryPort || null,
@@ -102,8 +125,8 @@ router.post('/rfq', async (req, res) => {
       ]
     );
 
-    // If customer is logged in, also record line items into product_requests so they appear in their portal
-    if (req.user && Array.isArray(items) && items.length > 0) {
+    // If customer is registered or logged in, also record line items into product_requests so they appear in their portal
+    if (userId && Array.isArray(items) && items.length > 0) {
       for (const item of items) {
         const prodId = crypto.randomUUID();
         await run(
@@ -111,7 +134,7 @@ router.post('/rfq', async (req, res) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', ?, ?)`,
           [
             prodId,
-            req.user.id,
+            userId,
             item.product || item.product_name || 'Alloy Piping Component',
             item.material || item.grade || null,
             item.size || null,
@@ -121,7 +144,7 @@ router.post('/rfq', async (req, res) => {
             now,
             now,
           ]
-        );
+        ).catch(() => {});
       }
     }
 
@@ -129,11 +152,44 @@ router.post('/rfq', async (req, res) => {
       success: true,
       message: 'RFQ submitted successfully.',
       rfqNumber,
+      reference: rfqNumber,
       rfqId,
+      confirmationToken,
     });
   } catch (err) {
     console.error('[RFQ Submission Error]:', err);
     return res.status(500).json({ error: 'Failed to submit RFQ request.' });
+  }
+});
+
+/**
+ * GET /api/rfq/confirmation/:token
+ * Retrieve confirmation details for a submitted RFQ by token
+ */
+router.get('/rfq/confirmation/:token', async (req, res) => {
+  try {
+    const rfq = await get(
+      `SELECT reference, company, contact_name, email, phone, country, incoterm, delivery_port,
+              target_lead_time, project_name, message, items, attachments, testing, certification,
+              status, created_at
+       FROM rfq_requests
+       WHERE confirmation_token = ?`,
+      [req.params.token]
+    );
+
+    if (!rfq) {
+      return res.status(404).json({ error: 'This acknowledgement link is invalid or no longer available.' });
+    }
+
+    return res.json({
+      ...rfq,
+      items: typeof rfq.items === 'string' ? JSON.parse(rfq.items || '[]') : (rfq.items || []),
+      attachments: typeof rfq.attachments === 'string' ? JSON.parse(rfq.attachments || '[]') : (rfq.attachments || []),
+      testing: typeof rfq.testing === 'string' ? JSON.parse(rfq.testing || '[]') : (rfq.testing || []),
+    });
+  } catch (err) {
+    console.error('[RFQ Confirmation Fetch Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve RFQ confirmation.' });
   }
 });
 

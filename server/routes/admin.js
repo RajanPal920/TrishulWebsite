@@ -99,37 +99,92 @@ router.get('/overview', async (req, res) => {
 
 /**
  * GET /api/admin/customers
- * Paginated and searchable list of registered customers
+ * Paginated, filtered, and searchable list of registered customers
  */
 router.get('/customers', async (req, res) => {
   try {
-    const { search, limit = 50, offset = 0 } = req.query;
-    let sql = `
-      SELECT u.id, u.email, u.full_name, u.company, u.phone, u.role, u.login_method, u.last_login_at, u.created_at,
-             (SELECT count(*) FROM product_requests WHERE user_id = u.id) as product_requests_count,
-             (SELECT count(*) FROM material_requests WHERE user_id = u.id) as material_requests_count,
-             (SELECT count(*) FROM inquiries WHERE user_id = u.id) as inquiries_count,
-             (SELECT count(*) FROM orders WHERE user_id = u.id) as orders_count
-      FROM users u
-      WHERE u.role = 'customer'
-    `;
-    const params = [];
+    const {
+      search,
+      method,
+      status,
+      sort = 'registered_desc',
+      limit = 20,
+      page = 1,
+      offset: customOffset,
+    } = req.query;
 
-    if (search) {
-      sql += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.company LIKE ? OR u.phone LIKE ?)';
-      const term = `%${search}%`;
-      params.push(term, term, term, term);
+    const parsedLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const offset = customOffset !== undefined ? parseInt(customOffset, 10) : (parsedPage - 1) * parsedLimit;
+
+    let whereSql = "WHERE u.role = 'customer'";
+    const params = [];
+    const countParams = [];
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      whereSql += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.company LIKE ? OR u.phone LIKE ? OR u.id LIKE ?)';
+      params.push(term, term, term, term, term);
+      countParams.push(term, term, term, term, term);
     }
 
-    sql += ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit, 10), parseInt(offset, 10));
+    if (method && method !== 'all') {
+      whereSql += ' AND LOWER(u.login_method) = ?';
+      const cleanMethod = method.trim().toLowerCase();
+      params.push(cleanMethod);
+      countParams.push(cleanMethod);
+    }
 
-    const customers = await all(sql, params);
-    const totalCount = await get("SELECT count(*) as count FROM users WHERE role = 'customer'");
+    if (status && status !== 'all') {
+      whereSql += " AND LOWER(COALESCE(u.status, 'active')) = ?";
+      const cleanStatus = status.trim().toLowerCase();
+      params.push(cleanStatus);
+      countParams.push(cleanStatus);
+    }
+
+    let orderSql = ' ORDER BY u.created_at DESC';
+    if (sort === 'registered_asc') {
+      orderSql = ' ORDER BY u.created_at ASC';
+    } else if (sort === 'login_desc') {
+      orderSql = ' ORDER BY (u.last_login_at IS NULL), u.last_login_at DESC';
+    } else if (sort === 'login_asc') {
+      orderSql = ' ORDER BY (u.last_login_at IS NULL), u.last_login_at ASC';
+    } else if (sort === 'name_asc') {
+      orderSql = ' ORDER BY u.full_name ASC';
+    } else if (sort === 'name_desc') {
+      orderSql = ' ORDER BY u.full_name DESC';
+    }
+
+    const selectSql = `
+      SELECT u.id, u.email, u.full_name, u.company, u.phone, u.role,
+             COALESCE(u.status, 'active') as status,
+             u.login_method, u.last_login_at, u.created_at,
+             (SELECT count(*) FROM rfq_requests WHERE user_id = u.id OR (user_id IS NULL AND LOWER(email) = LOWER(u.email))) as rfq_count,
+             (SELECT count(*) FROM orders WHERE user_id = u.id) as orders_count,
+             (SELECT count(*) FROM product_requests WHERE user_id = u.id) as product_requests_count,
+             (SELECT count(*) FROM material_requests WHERE user_id = u.id) as material_requests_count,
+             (SELECT count(*) FROM inquiries WHERE user_id = u.id) as inquiries_count
+      FROM users u
+      ${whereSql}
+      ${orderSql}
+      LIMIT ? OFFSET ?
+    `;
+    params.push(parsedLimit, offset);
+
+    const [customers, countRow] = await Promise.all([
+      all(selectSql, params),
+      get(`SELECT count(*) as count FROM users u ${whereSql}`, countParams),
+    ]);
+
+    const total = countRow?.count || 0;
+    const totalPages = Math.ceil(total / parsedLimit);
 
     return res.json({
       customers: customers || [],
-      total: totalCount?.count || 0,
+      total,
+      page: parsedPage,
+      totalPages,
+      limit: parsedLimit,
     });
   } catch (err) {
     console.error('[Admin Customers Error]:', err);
@@ -139,12 +194,14 @@ router.get('/customers', async (req, res) => {
 
 /**
  * GET /api/admin/customers/:id
- * Complete 360-degree customer profile & requisition history
+ * Complete 360-degree customer profile, activity metrics & inquiry history
  */
 router.get('/customers/:id', async (req, res) => {
   try {
     const customer = await get(
-      `SELECT id, email, full_name, company, phone, role, avatar_url, login_method, last_login_at, created_at
+      `SELECT id, email, full_name, company, phone, role,
+              COALESCE(status, 'active') as status,
+              avatar_url, login_method, last_login_at, created_at, updated_at
        FROM users WHERE id = ?`,
       [req.params.id]
     );
@@ -153,25 +210,156 @@ router.get('/customers/:id', async (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
-    const [productRequests, materialRequests, inquiries, orders, loginHistory] = await Promise.all([
+    const [rawRfqs, productRequests, materialRequests, inquiries, orders, loginHistory] = await Promise.all([
+      all(
+        `SELECT * FROM rfq_requests
+         WHERE user_id = ? OR (user_id IS NULL AND LOWER(email) = LOWER(?))
+         ORDER BY created_at DESC`,
+        [customer.id, customer.email]
+      ),
       all('SELECT * FROM product_requests WHERE user_id = ? ORDER BY created_at DESC', [customer.id]),
       all('SELECT * FROM material_requests WHERE user_id = ? ORDER BY created_at DESC', [customer.id]),
       all('SELECT * FROM inquiries WHERE user_id = ? ORDER BY created_at DESC', [customer.id]),
       all('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC', [customer.id]),
-      all('SELECT * FROM user_login_activity WHERE user_id = ? ORDER BY created_at DESC LIMIT 10', [customer.id]),
+      all('SELECT * FROM user_login_activity WHERE user_id = ? ORDER BY created_at DESC LIMIT 15', [customer.id]),
     ]);
+
+    // Parse JSON fields in RFQs
+    const rfqs = (rawRfqs || []).map((r) => ({
+      ...r,
+      items: typeof r.items === 'string' ? JSON.parse(r.items || '[]') : (r.items || []),
+      testing: typeof r.testing === 'string' ? JSON.parse(r.testing || '[]') : (r.testing || []),
+      attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments || '[]') : (r.attachments || []),
+    }));
+
+    // Calculate dates
+    const inquiryDates = [
+      ...rfqs.map((r) => r.created_at),
+      ...(inquiries || []).map((i) => i.created_at),
+      ...(productRequests || []).map((p) => p.created_at),
+      ...(materialRequests || []).map((m) => m.created_at),
+    ]
+      .filter(Boolean)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+    const lastInquiryDate = inquiryDates.length > 0 ? inquiryDates[0] : null;
+    const lastPurchaseDate = orders && orders.length > 0 ? orders[0].created_at : null;
+
+    const activityStats = {
+      totalRfqs: rfqs.length,
+      totalOrders: (orders || []).length,
+      totalProductRequests: (productRequests || []).length,
+      totalMaterialRequests: (materialRequests || []).length,
+      totalInquiries: (inquiries || []).length,
+      lastInquiryDate,
+      lastPurchaseDate,
+    };
 
     return res.json({
       customer,
+      rfqs,
       productRequests: productRequests || [],
       materialRequests: materialRequests || [],
       inquiries: inquiries || [],
       orders: orders || [],
       loginHistory: loginHistory || [],
+      activityStats,
     });
   } catch (err) {
     console.error('[Admin Customer Detail Error]:', err);
     return res.status(500).json({ error: 'Failed to retrieve customer details.' });
+  }
+});
+
+/**
+ * PUT /api/admin/customers/:id
+ * Admin updates customer contact information & account status
+ */
+router.put('/customers/:id', async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    const existing = await get('SELECT * FROM users WHERE id = ?', [customerId]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+
+    const { full_name, email, phone, company, status } = req.body;
+    const cleanName = (full_name !== undefined ? full_name : existing.full_name || '').trim();
+    const cleanEmail = (email !== undefined ? email : existing.email || '').trim().toLowerCase();
+    const cleanPhone = phone !== undefined ? phone.trim() : (existing.phone || '');
+    const cleanCompany = company !== undefined ? company.trim() : (existing.company || '');
+    const cleanStatus = (status !== undefined ? status : existing.status || 'active').trim().toLowerCase();
+
+    // 1. Validate full name
+    if (!cleanName || cleanName.length < 2) {
+      return res.status(400).json({ error: 'Customer full name is required (minimum 2 characters).' });
+    }
+
+    // 2. Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+
+    // Check duplicate email
+    const duplicate = await get('SELECT id FROM users WHERE email = ? AND id != ?', [cleanEmail, customerId]);
+    if (duplicate) {
+      return res.status(409).json({ error: 'Another account already uses this email address.' });
+    }
+
+    // 3. Validate phone if provided
+    if (cleanPhone) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(400).json({
+          error: 'Invalid phone number format. Please provide a valid phone number with country code (e.g. +91 98200 12345).',
+        });
+      }
+    }
+
+    // 4. Validate status
+    if (cleanStatus !== 'active' && cleanStatus !== 'inactive') {
+      return res.status(400).json({ error: "Account status must be either 'active' or 'inactive'." });
+    }
+
+    const now = new Date().toISOString();
+    await run(
+      `UPDATE users
+       SET full_name = ?,
+           email = ?,
+           phone = ?,
+           company = ?,
+           status = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [cleanName, cleanEmail, cleanPhone || null, cleanCompany || null, cleanStatus, now, customerId]
+    );
+
+    await logAdminAction(
+      req.user,
+      'UPDATE_CUSTOMER',
+      'users',
+      customerId,
+      `Updated contact details for ${cleanEmail} (Name: ${cleanName}, Phone: ${cleanPhone || 'None'}, Status: ${cleanStatus})`,
+      req
+    );
+
+    const updated = await get(
+      `SELECT id, email, full_name, company, phone, role,
+              COALESCE(status, 'active') as status,
+              avatar_url, login_method, last_login_at, created_at, updated_at
+       FROM users WHERE id = ?`,
+      [customerId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Customer contact information updated successfully.',
+      customer: updated,
+    });
+  } catch (err) {
+    console.error('[Admin Customer Update Error]:', err);
+    return res.status(500).json({ error: 'Failed to update customer account.' });
   }
 });
 

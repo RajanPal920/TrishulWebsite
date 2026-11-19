@@ -49,8 +49,17 @@ router.put('/profile', async (req, res) => {
     const comp = company !== undefined ? company.trim() : req.user.company;
     const ph = phone !== undefined ? phone.trim() : req.user.phone;
 
-    if (!name) {
-      return res.status(400).json({ error: 'Full name cannot be empty.' });
+    if (!name || name.length < 2) {
+      return res.status(400).json({ error: 'Full name cannot be empty (minimum 2 characters).' });
+    }
+
+    if (ph) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(ph)) {
+        return res.status(400).json({
+          error: 'Please enter a valid phone number with country code (e.g. +91 98200 12345).',
+        });
+      }
     }
 
     const now = new Date().toISOString();

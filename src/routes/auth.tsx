@@ -205,6 +205,25 @@ function AuthPage() {
     setError(null);
     setNotice(null);
 
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      setError("Please enter your full name (minimum 2 characters).");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      setError("Please enter a valid work email address (e.g. name@company.com).");
+      return;
+    }
+
+    if (phone.trim()) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(phone.trim())) {
+        setError("Please enter a valid phone number with country code (e.g. +91 98200 12345).");
+        return;
+      }
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;

@@ -214,11 +214,27 @@ function CustomerPortalPage() {
     e.preventDefault();
     setProfileBusy(true);
     setProfileNotice(null);
+
+    if (!profileName.trim() || profileName.trim().length < 2) {
+      setProfileNotice("Full name is required (minimum 2 characters).");
+      setProfileBusy(false);
+      return;
+    }
+
+    if (profilePhone.trim()) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(profilePhone.trim())) {
+        setProfileNotice("Please enter a valid phone number with country code (e.g. +91 98200 12345).");
+        setProfileBusy(false);
+        return;
+      }
+    }
+
     try {
       await updateProfile({
-        fullName: profileName,
-        company: profileCompany,
-        phone: profilePhone,
+        fullName: profileName.trim(),
+        company: profileCompany.trim(),
+        phone: profilePhone.trim(),
       });
       setProfileNotice("Profile updated successfully.");
     } catch (err: any) {
@@ -705,19 +721,23 @@ function CustomerPortalPage() {
                         <span>{user?.company || "Company not specified"}</span>
                       </p>
 
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs text-muted-foreground border-t border-border/50">
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2.5 text-xs text-muted-foreground border-t border-border/50">
                         <div className="flex items-center gap-1.5 truncate">
                           <Mail className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                           <span className="truncate">{user?.email}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Phone className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
-                          <span>{user?.phone || "Phone not provided"}</span>
+                          <span className={user?.phone ? "text-foreground font-mono" : ""}>{user?.phone || "Not Provided"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground">Auth:</span>
+                          <span className="capitalize text-foreground font-mono text-[11px]">{user?.login_method || "Password"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                           <span>
-                            Member since:{" "}
+                            Since:{" "}
                             {user?.createdAt
                               ? new Date(user.createdAt).toLocaleDateString("en-IN", {
                                   day: "numeric",
@@ -799,14 +819,18 @@ function CustomerPortalPage() {
 
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Phone Number
+                        Phone / Mobile Number (with Country Code)
                       </label>
                       <input
                         type="tel"
                         value={profilePhone}
                         onChange={(e) => setProfilePhone(e.target.value)}
+                        placeholder="+91 98200 12345"
                         className={fieldClass}
                       />
+                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                        Include country code (e.g. +91 for India, +1 for US/Canada, +44 for UK).
+                      </span>
                     </div>
 
                     <button

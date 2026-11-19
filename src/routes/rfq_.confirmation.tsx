@@ -10,7 +10,16 @@ interface ConfirmationSearch { token: string }
 export const Route = createFileRoute("/rfq_/confirmation")({
   validateSearch: (search: Record<string, unknown>): ConfirmationSearch => ({ token: typeof search["token"] === "string" ? search["token"] : "" }),
   loaderDeps: ({ search }) => ({ token: search.token }),
-  loader: ({ deps }) => getRfqConfirmation({ data: { token: deps.token } }),
+  loader: async ({ deps }) => {
+    try {
+      const { api } = await import("@/lib/api");
+      const res = await api.rfq.getConfirmation(deps.token);
+      if (res && res.reference) return res;
+    } catch (e) {
+      // Fallback to internal loader
+    }
+    return getRfqConfirmation({ data: { token: deps.token } });
+  },
   head: () => ({ meta: [
     { title: "RFQ Received | Trishul Metals & Alloys" },
     { name: "description", content: "Secure acknowledgement for a quotation request submitted to Trishul Metals & Alloys." },

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   company VARCHAR(255) NULL,
   phone VARCHAR(50) NULL,
   role ENUM('customer', 'admin') NOT NULL DEFAULT 'customer',
+  status VARCHAR(50) NOT NULL DEFAULT 'active',
   google_id VARCHAR(255) UNIQUE NULL,
   avatar_url VARCHAR(500) NULL,
   login_method VARCHAR(50) NOT NULL DEFAULT 'password',

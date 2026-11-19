@@ -11,9 +11,29 @@ export interface User {
   company?: string | null;
   phone?: string | null;
   role: 'customer' | 'admin';
+  status?: 'active' | 'inactive';
+  login_method?: string;
   avatarUrl?: string | null;
   lastLoginAt?: string | null;
   createdAt?: string;
+}
+
+export interface AdminCustomerItem {
+  id: string;
+  email: string;
+  full_name: string;
+  company?: string | null;
+  phone?: string | null;
+  role: 'customer' | 'admin';
+  status: 'active' | 'inactive';
+  login_method: 'google' | 'password' | string;
+  last_login_at?: string | null;
+  created_at: string;
+  rfq_count: number;
+  orders_count: number;
+  product_requests_count?: number;
+  material_requests_count?: number;
+  inquiries_count?: number;
 }
 
 export interface ProductRequestItem {
@@ -366,16 +386,61 @@ export const api = {
       return request('/api/admin/overview');
     },
 
-    async getCustomers(query?: { search?: string; limit?: number; offset?: number }): Promise<{ customers: any[]; total: number }> {
+    async getCustomers(query?: {
+      search?: string;
+      method?: string;
+      status?: string;
+      sort?: string;
+      page?: number;
+      limit?: number;
+      offset?: number;
+    }): Promise<{ customers: AdminCustomerItem[]; total: number; page: number; totalPages: number; limit: number }> {
       const p = new URLSearchParams();
       if (query?.search) p.set('search', query.search);
+      if (query?.method && query.method !== 'all') p.set('method', query.method);
+      if (query?.status && query.status !== 'all') p.set('status', query.status);
+      if (query?.sort) p.set('sort', query.sort);
+      if (query?.page) p.set('page', String(query.page));
       if (query?.limit) p.set('limit', String(query.limit));
-      if (query?.offset) p.set('offset', String(query.offset));
+      if (query?.offset !== undefined) p.set('offset', String(query.offset));
       return request(`/api/admin/customers${p.toString() ? `?${p.toString()}` : ''}`);
     },
 
-    async getCustomer(id: string): Promise<any> {
+    async getCustomer(id: string): Promise<{
+      customer: AdminCustomerItem & { avatar_url?: string | null; updated_at?: string };
+      rfqs: RfqInquiryItem[];
+      productRequests: ProductRequestItem[];
+      materialRequests: MaterialRequestItem[];
+      inquiries: InquiryItem[];
+      orders: CustomerOrder[];
+      loginHistory: any[];
+      activityStats: {
+        totalRfqs: number;
+        totalOrders: number;
+        totalProductRequests: number;
+        totalMaterialRequests: number;
+        totalInquiries: number;
+        lastInquiryDate: string | null;
+        lastPurchaseDate: string | null;
+      };
+    }> {
       return request(`/api/admin/customers/${id}`);
+    },
+
+    async updateCustomer(
+      id: string,
+      data: {
+        full_name?: string;
+        email?: string;
+        phone?: string | null;
+        company?: string | null;
+        status?: 'active' | 'inactive';
+      }
+    ): Promise<{ success: boolean; message: string; customer: AdminCustomerItem }> {
+      return request(`/api/admin/customers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
     },
 
     async getLoginActivity(): Promise<{ loginActivity: any[] }> {
@@ -467,11 +532,22 @@ export const api = {
   },
 
   rfq: {
-    async submit(data: any): Promise<{ success: boolean; rfqNumber: string; rfqId: string }> {
-      return request<{ success: boolean; rfqNumber: string; rfqId: string }>('/api/rfq', {
+    async submit(data: any): Promise<{
+      success: boolean;
+      message: string;
+      rfqNumber: string;
+      reference: string;
+      rfqId: string;
+      confirmationToken: string;
+    }> {
+      return request('/api/rfq', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+    },
+
+    async getConfirmation(token: string): Promise<any> {
+      return request(`/api/rfq/confirmation/${token}`);
     },
   },
 };

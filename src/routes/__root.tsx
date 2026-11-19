@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
@@ -20,6 +21,7 @@ import { AskTrishul } from "@/components/site/AskTrishul";
 import { FloatingContactButtons } from "@/components/site/FloatingContactButtons";
 import { RouteHero } from "@/components/site/RouteHero";
 import { AuthProvider } from "@/hooks/useAuth";
+import { AuthModal } from "@/components/site/AuthModal";
 
 
 function NotFoundComponent() {
@@ -233,23 +235,34 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const routerState = useRouterState();
+  const pathname = routerState.location.pathname;
+  const isAdminRoute = pathname.startsWith("/admin");
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ShortlistProvider>
-          <div className="flex min-h-screen flex-col">
-            <Header />
-            <main className="flex-1">
-              <RouteHero />
-              {/* Required: nested routes render here. */}
+          {isAdminRoute ? (
+            <main className="min-h-screen bg-background">
+              {/* Dedicated standalone Admin interface: completely separate from public header/footer/hero/widgets */}
               <Outlet />
             </main>
-            <Footer />
-            <CompareTray />
-            <FloatingContactButtons />
-            <AskTrishul />
-          </div>
+          ) : (
+            <div className="flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1">
+                <RouteHero />
+                {/* Required: nested routes render here. */}
+                <Outlet />
+              </main>
+              <Footer />
+              <CompareTray />
+              <FloatingContactButtons />
+              <AskTrishul />
+              <AuthModal />
+            </div>
+          )}
         </ShortlistProvider>
       </AuthProvider>
     </QueryClientProvider>

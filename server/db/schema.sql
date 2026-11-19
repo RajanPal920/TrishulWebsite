@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   company TEXT,
   phone TEXT,
   role TEXT NOT NULL DEFAULT 'customer',
+  status TEXT NOT NULL DEFAULT 'active',
   google_id TEXT UNIQUE,
   avatar_url TEXT,
   login_method TEXT DEFAULT 'password',

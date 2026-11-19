@@ -42,11 +42,20 @@ router.post('/register', async (req, res) => {
     const cleanCompany = (company || '').trim();
     const cleanPhone = (phone || '').trim();
 
-    if (!name) {
-      return res.status(400).json({ error: 'Full name is required.' });
+    if (!name || name.length < 2) {
+      return res.status(400).json({ error: 'Full name is required (minimum 2 characters).' });
     }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return res.status(400).json({ error: 'A valid work email is required.' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'A valid work email is required (e.g. name@company.com).' });
+    }
+    if (cleanPhone) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(400).json({
+          error: 'Please enter a valid phone number with country code (e.g. +91 98200 12345).',
+        });
+      }
     }
     if (!password || password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters long.' });

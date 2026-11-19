@@ -84,6 +84,11 @@ export async function initDatabase() {
     // Column already exists, safe to ignore
   }
   try {
+    await run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+  } catch {
+    // Column already exists, safe to ignore
+  }
+  try {
     await run('ALTER TABLE product_requests ADD COLUMN quotation_amount REAL');
   } catch {
     // Column already exists, safe to ignore

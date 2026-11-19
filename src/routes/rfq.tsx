@@ -10,6 +10,7 @@ import { productTypes } from "@/data/products";
 import { submitRfq } from "@/lib/rfq.functions";
 import { rfqCertificationOptions, rfqProcessingOptions, rfqUnits } from "@/data/rfq-options";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 
 
 interface RfqSearch {
@@ -196,6 +197,7 @@ function Rfq() {
       : "EN 10204 3.1",
   );
   const [busy, setBusy] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const [customer, setCustomer] = useState({ company: "", contactName: "", email: "", phone: "", country: "" });
@@ -251,9 +253,46 @@ function Rfq() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (busy || submitSuccess) return;
+
     setError(null);
-    setBusy(true);
     const form = new FormData(e.currentTarget);
+
+    const rawEmail = String(form.get("email") ?? "").trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!rawEmail || !emailRegex.test(rawEmail)) {
+      setError("Please provide a valid work email address for RFQ submission.");
+      return;
+    }
+
+    const companyName = String(form.get("company") ?? "").trim();
+    if (!companyName || companyName.length < 2) {
+      setError("Please provide your company or organization name.");
+      return;
+    }
+
+    const contactName = String(form.get("contactName") ?? "").trim();
+    if (!contactName || contactName.length < 2) {
+      setError("Please provide the contact person's full name.");
+      return;
+    }
+
+    const rawPhone = String(form.get("phone") ?? "").trim();
+    if (rawPhone) {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
+      if (!phoneRegex.test(rawPhone)) {
+        setError("Please enter a valid phone number with country code (e.g. +91 98200 12345).");
+        return;
+      }
+    }
+
+    if (!lines || lines.length === 0 || !lines.some((l) => l.material || l.product)) {
+      setError("Please add at least one line item with specified material grade or product.");
+      return;
+    }
+
+    setBusy(true);
+
     try {
       const attachments = await Promise.all(
         files.map(async (f) => ({
@@ -263,33 +302,49 @@ function Rfq() {
           data: await readAsBase64(f),
         })),
       );
-      const res = await send({
-        data: {
-          company: String(form.get("company") ?? ""),
-          contactName: String(form.get("contactName") ?? ""),
-          email: String(form.get("email") ?? ""),
-          phone: String(form.get("phone") ?? ""),
-          country: String(form.get("country") ?? ""),
-          incoterm: String(form.get("incoterm") ?? ""),
-          deliveryPort: String(form.get("deliveryPort") ?? ""),
-          targetLeadTime: String(form.get("targetLeadTime") ?? ""),
-          projectName: String(form.get("projectName") ?? ""),
-          message: String(form.get("message") ?? ""),
-          certification,
-          testing,
-          items: lines,
-          attachments,
-        },
-      });
-      await navigate({ to: "/rfq/confirmation", search: { token: res.confirmationToken } });
-    } catch (err) {
+
+      const payload = {
+        company: companyName,
+        contactName: contactName,
+        email: rawEmail,
+        phone: rawPhone || null,
+        country: String(form.get("country") ?? "").trim() || null,
+        incoterm: String(form.get("incoterm") ?? "").trim() || null,
+        deliveryPort: String(form.get("deliveryPort") ?? "").trim() || null,
+        targetLeadTime: String(form.get("targetLeadTime") ?? "").trim() || null,
+        projectName: String(form.get("projectName") ?? "").trim() || null,
+        message: String(form.get("message") ?? "").trim() || null,
+        certification,
+        testing,
+        items: lines,
+        line_items: lines,
+        attachments,
+      };
+
+      let token = "";
+      try {
+        const res = await api.rfq.submit(payload);
+        if (res && res.success) {
+          token = res.confirmationToken;
+        } else {
+          throw new Error(res?.message || "Server did not confirm RFQ.");
+        }
+      } catch (apiErr: any) {
+        console.warn("[API RFQ submit fallback to serverFn]:", apiErr?.message);
+        const fnRes = await send({ data: payload as any });
+        token = fnRes?.confirmationToken;
+      }
+
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        void navigate({ to: "/rfq/confirmation", search: { token } });
+      }, 500);
+    } catch (err: any) {
       setError(
-        err instanceof Error && err.message.includes("save")
-          ? err.message
-          : "Something went wrong sending your enquiry. Please email us and we will pick it up straight away.",
+        err?.message || "Something went wrong sending your enquiry. Please check your details and try again."
       );
-    } finally {
       setBusy(false);
+      setSubmitSuccess(false);
     }
   }
 
@@ -689,10 +744,10 @@ function Rfq() {
             <div className="flex flex-wrap items-center gap-4">
               <button
                 type="submit"
-                disabled={busy}
-                className="magnetic-action rounded-sm bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                disabled={busy || submitSuccess}
+                className="magnetic-action rounded-sm bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-all hover:opacity-90 disabled:opacity-50"
               >
-                {busy ? "Sending…" : "Submit enquiry"}
+                {submitSuccess ? "RFQ Submitted" : busy ? "Sending…" : "Submit RFQ"}
               </button>
               <a
                 href={`mailto:${company.exportEmail}?subject=RFQ%20-%20Alloy%20flanges%20and%20fittings`}
