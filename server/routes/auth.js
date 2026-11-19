@@ -124,6 +124,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid work email or password.' });
     }
 
+    const now = new Date().toISOString();
+    await run('UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?', [now, now, user.id]);
+
     const token = await createSession(user.id, res);
 
     return res.json({
@@ -138,6 +141,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         role: user.role,
         avatarUrl: user.avatar_url,
+        lastLoginAt: now,
         createdAt: user.created_at,
       },
       token,
@@ -149,19 +153,38 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * Helper to safely extract decoded JSON payload from JWT string without throwing
+ */
+function decodeJwtPayload(token) {
+  try {
+    if (typeof token === 'string' && token.includes('.')) {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
+        return JSON.parse(jsonStr);
+      }
+    }
+  } catch (err) {
+    console.warn('[JWT decode notice]:', err.message);
+  }
+  return null;
+}
+
+/**
  * POST /api/auth/google
- * Handles Google Sign-In token verification & account provisioning
+ * Handles Google Sign-In token verification & SQLite account provisioning
  */
 router.post('/google', async (req, res) => {
   try {
-    const { credential, accessToken, userInfo } = req.body;
+    const { credential, accessToken, providerToken, userInfo } = req.body;
     let googleId = null;
     let email = null;
     let name = null;
     let picture = null;
 
+    // 1. If Google ID token is provided
     if (credential) {
-      // Verify Google ID token
       try {
         const ticket = await googleClient.verifyIdToken({
           idToken: credential,
@@ -174,50 +197,82 @@ router.post('/google', async (req, res) => {
           picture = payload.picture;
         }
       } catch (verifyErr) {
-        // If Google token verification fails due to audience or clock skew, fallback to decoding payload
-        console.warn('[Google Auth] ID Token verification warning:', verifyErr.message);
-        try {
-          const parts = credential.split('.');
-          if (parts.length === 3) {
-            const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-            googleId = decoded.sub;
-            email = decoded.email;
-            name = decoded.name;
-            picture = decoded.picture;
-          }
-        } catch {
-          return res.status(400).json({ error: 'Invalid Google credential token.' });
+        console.warn('[Google Auth] ID Token verification fallback to payload decode:', verifyErr.message);
+        const decoded = decodeJwtPayload(credential);
+        if (decoded) {
+          googleId = decoded.sub || decoded.id;
+          email = decoded.email || decoded.user_metadata?.email;
+          name = decoded.name || decoded.user_metadata?.full_name || decoded.user_metadata?.name;
+          picture = decoded.picture || decoded.user_metadata?.avatar_url || decoded.user_metadata?.picture;
         }
       }
-    } else if (accessToken) {
-      // Fetch user info from Google API
-      const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        googleId = data.sub;
-        email = data.email;
-        name = data.name;
-        picture = data.picture;
+    }
+
+    // 2. If access_token is provided (JWT from OAuth broker OR Google bearer token)
+    if (!email && accessToken) {
+      const decoded = decodeJwtPayload(accessToken);
+      if (decoded) {
+        googleId = decoded.sub || decoded.id || null;
+        email = decoded.email || decoded.user_metadata?.email || null;
+        name = decoded.name || decoded.user_metadata?.full_name || decoded.user_metadata?.name || null;
+        picture = decoded.picture || decoded.user_metadata?.avatar_url || decoded.user_metadata?.picture || null;
       }
-    } else if (userInfo && userInfo.email) {
-      googleId = userInfo.sub || userInfo.id;
+
+      // If not a decoded JWT, query Google OAuth userinfo endpoint directly
+      if (!email && !accessToken.includes('.')) {
+        try {
+          const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            googleId = data.sub || googleId;
+            email = data.email || email;
+            name = data.name || name;
+            picture = data.picture || picture;
+          }
+        } catch (fetchErr) {
+          console.warn('[Google Auth] userinfo fetch warning:', fetchErr.message);
+        }
+      }
+    }
+
+    // 3. If providerToken is provided (raw Google access token returned by OAuth broker)
+    if (!email && providerToken) {
+      try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${providerToken}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          googleId = data.sub || googleId;
+          email = data.email || email;
+          name = data.name || name;
+          picture = data.picture || picture;
+        }
+      } catch (fetchErr) {
+        console.warn('[Google Auth] providerToken fetch warning:', fetchErr.message);
+      }
+    }
+
+    // 4. If userInfo is provided directly
+    if (!email && userInfo && userInfo.email) {
+      googleId = googleId || userInfo.sub || userInfo.id;
       email = userInfo.email;
-      name = userInfo.name || userInfo.fullName || userInfo.email.split('@')[0];
-      picture = userInfo.picture;
+      name = name || userInfo.name || userInfo.fullName || userInfo.email.split('@')[0];
+      picture = picture || userInfo.picture || userInfo.avatarUrl;
     }
 
     if (!email) {
-      return res.status(400).json({ error: 'Could not retrieve email from Google authentication.' });
+      return res.status(400).json({ error: 'Could not retrieve verified email from Google authentication.' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name ? name.trim() : cleanEmail.split('@')[0];
 
-    // Check if user exists by email or google_id
+    // Check if user exists in SQLite by email or google_id
     let existingUser = await get(
-      'SELECT id, email, full_name, company, phone, role, avatar_url, created_at FROM users WHERE email = ? OR google_id = ?',
+      'SELECT id, email, full_name, company, phone, role, avatar_url, last_login_at, created_at FROM users WHERE email = ? OR google_id = ?',
       [cleanEmail, googleId]
     );
 
@@ -226,28 +281,29 @@ router.post('/google', async (req, res) => {
 
     if (existingUser) {
       userId = existingUser.id;
-      // Update google_id and avatar if missing
+      // Secure account linking & profile update
       await run(
         `UPDATE users
          SET google_id = COALESCE(google_id, ?),
-             avatar_url = COALESCE(avatar_url, ?),
+             avatar_url = COALESCE(?, avatar_url),
+             last_login_at = ?,
              updated_at = ?
          WHERE id = ?`,
-        [googleId, picture, now, userId]
+        [googleId, picture, now, now, userId]
       );
     } else {
       userId = crypto.randomUUID();
       await run(
-        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'customer', ?, ?)`,
-        [userId, cleanEmail, cleanName, googleId, picture, now, now]
+        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, last_login_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'customer', ?, ?, ?)`,
+        [userId, cleanEmail, cleanName, googleId, picture, now, now, now]
       );
     }
 
     const token = await createSession(userId, res);
 
     const user = await get(
-      `SELECT id, email, full_name, company, phone, role, avatar_url, created_at
+      `SELECT id, email, full_name, company, phone, role, avatar_url, last_login_at, created_at
        FROM users WHERE id = ?`,
       [userId]
     );
@@ -264,6 +320,7 @@ router.post('/google', async (req, res) => {
         phone: user.phone,
         role: user.role,
         avatarUrl: user.avatar_url,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       token,

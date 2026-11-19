@@ -18,7 +18,7 @@ export async function authenticateToken(req, res, next) {
     // Look up session in user_sessions table
     const session = await get(
       `SELECT s.id as session_id, s.token, s.expires_at,
-              u.id, u.email, u.full_name, u.company, u.phone, u.role, u.avatar_url, u.created_at
+              u.id, u.email, u.full_name, u.company, u.phone, u.role, u.avatar_url, u.last_login_at, u.created_at
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ?`,
@@ -49,6 +49,7 @@ export async function authenticateToken(req, res, next) {
       phone: session.phone,
       role: session.role,
       avatarUrl: session.avatar_url,
+      lastLoginAt: session.last_login_at,
       createdAt: session.created_at,
     };
     req.sessionId = session.session_id;

@@ -12,6 +12,7 @@ export interface User {
   phone?: string | null;
   role: 'customer' | 'admin';
   avatarUrl?: string | null;
+  lastLoginAt?: string;
   createdAt?: string;
 }
 
@@ -149,6 +150,7 @@ export const api = {
     async google(payload: {
       credential?: string;
       accessToken?: string;
+      providerToken?: string;
       userInfo?: { email: string; name?: string; picture?: string; sub?: string };
     }): Promise<{ success: boolean; user: User }> {
       return request<{ success: boolean; user: User }>('/api/auth/google', {

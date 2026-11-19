@@ -66,6 +66,13 @@ export async function initDatabase() {
   await exec(schemaSql);
   console.log('[DB] Schema applied successfully.');
 
+  // Safe schema migration for last_login_at
+  try {
+    await run('ALTER TABLE users ADD COLUMN last_login_at TEXT');
+  } catch {
+    // Column already exists, safe to ignore
+  }
+
   // Check if stock_items is populated
   const stockCount = await get('SELECT COUNT(*) as count FROM stock_items');
   if (stockCount && stockCount.count === 0) {

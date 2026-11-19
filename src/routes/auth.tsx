@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Breadcrumbs, Section, SectionHead } from "@/components/site/parts";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -34,6 +34,34 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+const DEFAULT_CLIENT_ID = "288002387414-6cvdo0ftcmsi36l9npigsaoj3m86oedc.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID =
+  (import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined) || DEFAULT_CLIENT_ID;
+
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        id?: {
+          initialize: (options: Record<string, unknown>) => void;
+          prompt: (callback?: (notification: any) => void) => void;
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
+        };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            prompt?: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+          }) => {
+            requestAccessToken: (options?: { prompt?: string }) => void;
+          };
+        };
+      };
+    };
+  }
+}
+
 const fieldClass =
   "motion-field mt-2 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
 
@@ -55,10 +83,125 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Forgot password modal
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  // Complete Google sign in helper
+  const completeGoogleSignIn = useCallback(
+    async (tokens: { accessToken?: string; providerToken?: string; credential?: string }) => {
+      setBusy(true);
+      setError(null);
+
+      // Attempt to decode client JWT if token is formatted as JWT (header.payload.signature)
+      let userInfo: { email: string; name?: string; picture?: string; sub?: string } | undefined;
+      const tokToInspect = tokens.credential || tokens.accessToken;
+      if (tokToInspect && tokToInspect.includes(".")) {
+        try {
+          const parts = tokToInspect.split(".");
+          const part1 = parts[1];
+          if (parts.length >= 2 && part1) {
+            const b64 = part1.replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = JSON.parse(atob(b64));
+            const email = decoded.email || decoded.user_metadata?.email;
+            if (email) {
+              userInfo = {
+                email,
+                name: decoded.name || decoded.user_metadata?.full_name || decoded.user_metadata?.name,
+                picture: decoded.picture || decoded.user_metadata?.avatar_url,
+                sub: decoded.sub || decoded.id,
+              };
+            }
+          }
+        } catch (e) {
+          console.warn("[JWT Client Decode Notice]:", e);
+        }
+      }
+
+      const payload: {
+        accessToken?: string;
+        providerToken?: string;
+        credential?: string;
+        userInfo?: { email: string; name?: string; picture?: string; sub?: string };
+      } = {};
+      if (tokens.accessToken) payload.accessToken = tokens.accessToken;
+      if (tokens.providerToken) payload.providerToken = tokens.providerToken;
+      if (tokens.credential) payload.credential = tokens.credential;
+      if (userInfo) payload.userInfo = userInfo;
+
+      try {
+        await loginWithGoogle(payload);
+        // Clean hash & query from URL
+        window.history.replaceState(null, "", window.location.pathname + (search.next ? `?next=${encodeURIComponent(search.next)}` : ""));
+        void navigate({ to: targetUrl });
+      } catch (err: any) {
+        setError(err?.message || "Google sign in failed. Please try again.");
+        setBusy(false);
+      }
+    },
+    [loginWithGoogle, navigate, search.next, targetUrl]
+  );
+
+  // Handle incoming OAuth redirects from Google or broker (#access_token=... or ?access_token=...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // 1. Inspect URL Hash & Search Query for OAuth redirect response
+    const hash = window.location.hash ? window.location.hash.substring(1) : "";
+    const searchStr = window.location.search ? window.location.search.substring(1) : "";
+    const hashParams = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(searchStr);
+
+    const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
+    const providerToken = hashParams.get("provider_token") || searchParams.get("provider_token");
+    const idToken = hashParams.get("id_token") || searchParams.get("id_token");
+
+    if (accessToken || providerToken || idToken) {
+      void completeGoogleSignIn({
+        ...(accessToken ? { accessToken } : {}),
+        ...(providerToken ? { providerToken } : {}),
+        ...(idToken ? { credential: idToken } : {}),
+      });
+    }
+
+    // 2. Listen for OAuth postMessage responses from popup
+    const handleAuthMessage = (event: MessageEvent) => {
+      const allowedOrigins = [
+        "https://oauth.lovable.app",
+        "https://lovable.dev",
+        "https://trishulmetal.lovable.app",
+        window.location.origin,
+      ];
+      if (!allowedOrigins.some((o) => event.origin === o)) return;
+
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "authorization_response") return;
+
+      const resp = data.response;
+      if (!resp) return;
+
+      const msgAccessToken = resp.access_token || resp.accessToken;
+      const msgProviderToken = resp.provider_token;
+      const msgIdToken = resp.id_token || resp.idToken;
+
+      if (msgAccessToken || msgProviderToken || msgIdToken) {
+        void completeGoogleSignIn({
+          ...(msgAccessToken ? { accessToken: msgAccessToken } : {}),
+          ...(msgProviderToken ? { providerToken: msgProviderToken } : {}),
+          ...(msgIdToken ? { credential: msgIdToken } : {}),
+        });
+      }
+    };
+
+    window.addEventListener("message", handleAuthMessage);
+    return () => {
+      window.removeEventListener("message", handleAuthMessage);
+    };
+  }, [completeGoogleSignIn]);
 
   // If already authenticated, redirect to destination
   useEffect(() => {
@@ -67,7 +210,6 @@ function AuthPage() {
     }
   }, [user, navigate, targetUrl]);
 
-  // Reset error & notice on tab change
   const handleTabChange = (newMode: "signin" | "signup") => {
     setMode(newMode);
     setError(null);
@@ -124,36 +266,91 @@ function AuthPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setError(null);
     setNotice(null);
     setBusy(true);
 
+    if (typeof window === "undefined") return;
+
+    let isInIframe = false;
     try {
-      // In production/Google OAuth setup, trigger Google Sign-In or account selector
-      // If window.google is loaded, use prompt, otherwise fallback to account request
-      if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
-        (window as any).google.accounts.id.prompt();
-      } else {
-        // Fallback demo/direct prompt for testing or custom provider
-        const promptEmail = window.prompt("Enter Google Account email to authenticate:", email || "client@company.com");
-        if (!promptEmail) {
-          setBusy(false);
-          return;
-        }
-        await loginWithGoogle({
-          userInfo: {
-            email: promptEmail,
-            name: promptEmail.split("@")[0] || "Customer",
-          },
-        });
-        void navigate({ to: targetUrl });
-      }
-    } catch (err: any) {
-      setError(err?.message || "Google authentication was not completed.");
-    } finally {
-      setBusy(false);
+      isInIframe = window.self !== window.top;
+    } catch {
+      isInIframe = true;
     }
+
+    const state =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+    const redirectUri = `${window.location.origin}/auth?next=${encodeURIComponent(targetUrl)}`;
+    const useDirectGoogleOAuth = import.meta.env["VITE_USE_DIRECT_GOOGLE_OAUTH"] === "true";
+
+    let targetUrlWithParams = "";
+
+    if (useDirectGoogleOAuth && GOOGLE_CLIENT_ID) {
+      targetUrlWithParams =
+        `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=token` +
+        `&scope=${encodeURIComponent("openid email profile")}` +
+        `&prompt=select_account` +
+        `&state=${encodeURIComponent(state)}`;
+    } else {
+      const isLovableHost = window.location.hostname.includes("lovable.app");
+      const brokerUrl = isLovableHost ? "/~oauth/initiate" : "https://trishulmetal.lovable.app/~oauth/initiate";
+
+      const params = new URLSearchParams({
+        provider: "google",
+        redirect_uri: redirectUri,
+        state,
+        prompt: "select_account",
+      });
+
+      if (isInIframe) {
+        params.set("response_mode", "web_message");
+      }
+
+      targetUrlWithParams = `${brokerUrl}?${params.toString()}`;
+    }
+
+    // Dimensions for Google OAuth popup
+    const width = 500;
+    const height = 650;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    let popup: Window | null = null;
+    try {
+      popup = window.open(
+        targetUrlWithParams,
+        "google_oauth",
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no`
+      );
+    } catch (popupErr) {
+      console.warn("[Google OAuth popup error]:", popupErr);
+    }
+
+    // If popup was blocked by browser or mobile environment, perform full page redirect
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      window.location.href = targetUrlWithParams;
+      return;
+    }
+
+    // Monitor when the popup is closed
+    const checkInterval = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(checkInterval);
+        setBusy(false);
+      }
+    }, 500);
+
+    setTimeout(() => {
+      clearInterval(checkInterval);
+    }, 180000);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -161,7 +358,6 @@ function AuthPage() {
     if (!forgotEmail) return;
     setForgotBusy(true);
     try {
-      // Send reset request
       await new Promise((r) => setTimeout(r, 600));
       setForgotSuccess(true);
     } catch {
@@ -209,7 +405,7 @@ function AuthPage() {
             </button>
           </div>
 
-          {/* Continue with Google */}
+          {/* Continue with Google Button */}
           <div className="mt-6">
             <button
               type="button"
@@ -235,7 +431,7 @@ function AuthPage() {
                   fill="#EA4335"
                 />
               </svg>
-              <span>Continue with Google</span>
+              <span>{busy ? "Connecting to Google…" : "Continue with Google"}</span>
             </button>
           </div>
 
@@ -494,4 +690,3 @@ function AuthPage() {
     </>
   );
 }
-

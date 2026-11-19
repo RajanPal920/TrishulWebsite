@@ -16,6 +16,7 @@ interface AuthContextType {
   loginWithGoogle: (payload: {
     credential?: string;
     accessToken?: string;
+    providerToken?: string;
     userInfo?: { email: string; name?: string; picture?: string; sub?: string };
   }) => Promise<User>;
   logout: () => Promise<void>;
@@ -83,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async (payload: {
     credential?: string;
     accessToken?: string;
+    providerToken?: string;
     userInfo?: { email: string; name?: string; picture?: string; sub?: string };
   }): Promise<User> => {
     setLoading(true);
