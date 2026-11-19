@@ -1,11 +1,12 @@
-import sqlite3 from 'sqlite3';
 import mysql from 'mysql2/promise';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 const DB_DIR = path.resolve(__dirname, '../data');
 if (!fs.existsSync(DB_DIR)) {
@@ -14,15 +15,25 @@ if (!fs.existsSync(DB_DIR)) {
 
 const DB_PATH = path.join(DB_DIR, 'trishul.db');
 
-// SQLite connection (fallback & local development)
-export const sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
-  if (err) {
-    console.warn('[DB Notice] SQLite fallback initialization:', err.message);
-  } else {
-    sqliteDb.run('PRAGMA foreign_keys = ON;');
-    sqliteDb.run('PRAGMA journal_mode = WAL;');
+// SQLite connection (fallback & local development) - wrapped in try/catch to prevent native binary dlopen crashes on environments with incompatible GLIBC
+let sqliteDb = null;
+try {
+  const sqlite3 = require('sqlite3');
+  if (sqlite3 && sqlite3.Database) {
+    sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
+      if (err) {
+        console.warn('[DB Notice] SQLite fallback initialization:', err.message);
+      } else {
+        sqliteDb.run('PRAGMA foreign_keys = ON;');
+        sqliteDb.run('PRAGMA journal_mode = WAL;');
+      }
+    });
   }
-});
+} catch (sqliteLoadErr) {
+  console.warn('[DB Notice] SQLite native driver not available on this environment (will use MySQL):', sqliteLoadErr.message);
+}
+
+export { sqliteDb };
 
 // MySQL connection pool (Primary production engine)
 let mysqlPool = null;
@@ -101,6 +112,9 @@ export async function all(sql, params = []) {
   }
 
   return new Promise((resolve, reject) => {
+    if (!sqliteDb) {
+      return resolve([]);
+    }
     sqliteDb.all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows || []);
@@ -127,6 +141,9 @@ export async function get(sql, params = []) {
   }
 
   return new Promise((resolve, reject) => {
+    if (!sqliteDb) {
+      return resolve(null);
+    }
     sqliteDb.get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row || null);
@@ -158,6 +175,9 @@ export async function run(sql, params = []) {
   }
 
   return new Promise((resolve, reject) => {
+    if (!sqliteDb) {
+      return resolve({ lastID: 0, changes: 0 });
+    }
     sqliteDb.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
@@ -175,6 +195,9 @@ export async function exec(sql) {
   }
 
   return new Promise((resolve, reject) => {
+    if (!sqliteDb) {
+      return resolve();
+    }
     sqliteDb.exec(sql, (err) => {
       if (err) reject(err);
       else resolve();

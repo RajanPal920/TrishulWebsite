@@ -7,13 +7,21 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import type { Plugin } from "vite";
 
+const isBuild =
+  process.env.NODE_ENV === "production" ||
+  Boolean(process.env.VERCEL) ||
+  process.argv.some((arg) => arg === "build" || arg.endsWith("build"));
+
 function expressBackendPlugin(): Plugin {
   return {
     name: "express-backend-plugin",
     async configureServer(server) {
+      if (isBuild) return;
       try {
-        const { default: app } = await import("./server/index.js");
-        const { initDatabase } = await import("./server/db/init.js");
+        const serverPath = "./server/index.js";
+        const initPath = "./server/db/init.js";
+        const { default: app } = await import(/* @vite-ignore */ serverPath);
+        const { initDatabase } = await import(/* @vite-ignore */ initPath);
         await initDatabase().catch((e: any) => console.warn("[DB Init Notice]:", e?.message));
         server.middlewares.use(app);
         console.log("[Trishul Dev] Express API mounted directly into Vite dev server.");
@@ -22,9 +30,12 @@ function expressBackendPlugin(): Plugin {
       }
     },
     async configurePreviewServer(server) {
+      if (isBuild) return;
       try {
-        const { default: app } = await import("./server/index.js");
-        const { initDatabase } = await import("./server/db/init.js");
+        const serverPath = "./server/index.js";
+        const initPath = "./server/db/init.js";
+        const { default: app } = await import(/* @vite-ignore */ serverPath);
+        const { initDatabase } = await import(/* @vite-ignore */ initPath);
         await initDatabase().catch((e: any) => console.warn("[DB Init Notice]:", e?.message));
         server.middlewares.use(app);
         console.log("[Trishul Preview] Express API mounted directly into Vite preview server.");
@@ -37,7 +48,12 @@ function expressBackendPlugin(): Plugin {
 
 export default defineConfig({
   vite: {
-    plugins: [expressBackendPlugin()],
+    plugins: isBuild ? [] : [expressBackendPlugin()],
+    build: {
+      rollupOptions: {
+        external: ["sqlite3", "better-sqlite3"],
+      },
+    },
   },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
