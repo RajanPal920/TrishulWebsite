@@ -84,40 +84,5 @@ export async function handleDocumentDownload(input: DocumentDownloadInput) {
   // Provide direct document link
   const signedUrl = `/${doc.bucketPath}`;
 
-  let emailSent = false;
-  let emailNote = "";
-  try {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("email not configured");
-    const { sendLovableEmail } = await import("@lovable.dev/email-js");
-    const when = new Date().toISOString();
-    const lines = [
-      `Name: ${input.name || "—"}`,
-      `Company: ${input.company || "—"}`,
-      `Email: ${input.email}`,
-      `Phone: ${input.phone}`,
-      `Time (UTC): ${when}`,
-      `Referrer: ${input.referrer || "—"}`,
-    ];
-    await sendLovableEmail(
-      {
-        to: NOTIFY_TO,
-        from: "notifications@trishulmetal.com",
-        subject: `Document downloaded: ${doc.title}`,
-        html: `<p><strong>${doc.title}</strong> was downloaded.</p><ul>${lines
-          .map((l) => `<li>${l}</li>`)
-          .join("")}</ul>`,
-        text: `${doc.title} was downloaded.\n${lines.join("\n")}`,
-        purpose: "transactional",
-        idempotency_key: `dl-${doc.key}-${input.email}-${when}`,
-      },
-      { apiKey },
-    );
-    emailSent = true;
-  } catch (e) {
-    emailNote = e instanceof Error ? e.message : "email unavailable";
-    console.warn("[document-download] notification email skipped:", emailNote);
-  }
-
-  return { ok: true as const, signedUrl, fileName: `${doc.key}.pdf`, title: doc.title, emailSent, emailNote };
+  return { ok: true as const, signedUrl, fileName: `${doc.key}.pdf`, title: doc.title, emailSent: false, emailNote: "" };
 }

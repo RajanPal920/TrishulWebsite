@@ -131,32 +131,5 @@ export async function persistRfq(input: RfqInput): Promise<{ reference: string; 
     throw new Error("Could not save your enquiry. Please email us directly.");
   }
 
-  try {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("Email service is not configured.");
-    const { sendLovableEmail } = await import("@lovable.dev/email-js");
-    const itemRows = input.items
-      .map(
-        (item, index) =>
-          `<tr><td>${index + 1}</td><td>${escapeHtml(item.material || "—")}</td><td>${escapeHtml(item.product || "—")}</td><td>${escapeHtml(item.size || "—")}</td><td>${escapeHtml(item.rating || "—")}</td><td>${escapeHtml(item.facing || "—")}</td><td>${escapeHtml(`${item.quantity || "—"} ${item.unit || "pcs"}`)}</td><td>${escapeHtml(item.processing.join(", ") || "—")}</td></tr>`,
-      )
-      .join("");
-    const confirmationUrl = `https://www.trishulmetal.com/rfq/confirmation?token=${confirmationToken}`;
-    await sendLovableEmail(
-      {
-        to: "contactustrishul@gmail.com",
-        from: "notifications@trishulmetal.com",
-        subject: `New RFQ ${reference} — ${input.company}`,
-        html: `<h2>New quotation request ${reference}</h2><p><strong>${escapeHtml(input.company)}</strong><br>${escapeHtml(input.contactName)} · ${escapeHtml(input.email)} · ${escapeHtml(input.phone || "No phone")}</p><p>Project: ${escapeHtml(input.projectName || "—")}<br>Delivery: ${escapeHtml([input.incoterm, input.deliveryPort, input.targetLeadTime].filter(Boolean).join(" · ") || "—")}<br>Certification: ${escapeHtml(input.certification || "—")}<br>Testing: ${escapeHtml(input.testing.join(", ") || "—")}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>#</th><th>Grade</th><th>Product</th><th>Size</th><th>Class / schedule</th><th>Facing</th><th>Quantity</th><th>Processing</th></tr></thead><tbody>${itemRows}</tbody></table><p>Files: ${escapeHtml(stored.map((file) => file.name).join(", ") || "None")}</p><p>Notes: ${escapeHtml(input.message || "—")}</p><p><a href="${confirmationUrl}">Open acknowledgement</a></p>`,
-        text: `New quotation request ${reference}\n${input.company}\n${input.contactName} · ${input.email} · ${input.phone || "No phone"}\nProject: ${input.projectName || "—"}\nDelivery: ${[input.incoterm, input.deliveryPort, input.targetLeadTime].filter(Boolean).join(" · ") || "—"}\nCertification: ${input.certification || "—"}\nTesting: ${input.testing.join(", ") || "—"}\n\n${input.items.map((item, index) => `${index + 1}. ${item.material} | ${item.product} | ${item.size} | ${item.rating || "No class/schedule"} | ${item.facing || "No facing"} | ${item.quantity} ${item.unit} | ${item.processing.join(", ") || "No processing"}`).join("\n")}\n\nFiles: ${stored.map((file) => file.name).join(", ") || "None"}\nNotes: ${input.message || "—"}\n${confirmationUrl}`,
-        purpose: "transactional",
-        idempotency_key: `rfq-notify-${reference}`,
-      },
-      { apiKey },
-    );
-  } catch (emailError) {
-    console.warn("[rfq] inbox notification skipped:", emailError instanceof Error ? emailError.message : "Unavailable");
-  }
-
   return { reference, confirmationToken };
 }

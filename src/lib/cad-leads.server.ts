@@ -39,44 +39,5 @@ export async function handleCadDownload(input: CadDownloadInput) {
     console.warn("[CAD Download DB Warning]:", dbErr);
   }
 
-  try {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("email not configured");
-    const { sendLovableEmail } = await import("@lovable.dev/email-js");
-    const when = new Date().toISOString();
-    const rows: [string, string][] = [
-      ["Part code", input.partCode],
-      ["Family", input.family],
-      ["Standard", input.standard || "—"],
-      ["Size", input.size || "—"],
-      ["Class / schedule", input.spec || "—"],
-      ["Facing", input.facing || "—"],
-      ["Material", input.material || "—"],
-      ["Format", input.format.toUpperCase()],
-      ["Name", input.name || "—"],
-      ["Company", input.company || "—"],
-      ["Email", input.email],
-      ["Phone", input.phone],
-      ["Time (UTC)", when],
-      ["Referrer", input.referrer || "—"],
-    ];
-    await sendLovableEmail(
-      {
-        to: NOTIFY_TO,
-        from: "notifications@trishulmetal.com",
-        subject: `CAD lead: ${input.partCode} (${input.format.toUpperCase()})`,
-        html: `<p>A buyer unlocked a CAD download.</p><ul>${rows
-          .map(([k, v]) => `<li><strong>${escape(k)}:</strong> ${escape(v)}</li>`)
-          .join("")}</ul>`,
-        text: rows.map(([k, v]) => `${k}: ${v}`).join("\n"),
-        purpose: "transactional",
-        idempotency_key: `cad-${input.partCode}-${input.format}-${input.email}-${when}`,
-      },
-      { apiKey },
-    );
-  } catch (e) {
-    console.warn("[cad-download] notification email skipped:", e instanceof Error ? e.message : e);
-  }
-
   return { ok: true as const };
 }

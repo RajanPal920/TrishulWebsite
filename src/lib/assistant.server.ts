@@ -193,51 +193,7 @@ export async function runAssistant(input: AssistantInput): Promise<{ reply: stri
   const latestMessage = input.messages[input.messages.length - 1];
   const query = latestMessage?.content?.trim() || "";
 
-  // Check if an AI key is available (either Lovable AI Gateway or Gemini API)
-  const apiKey = process.env["LOVABLE_API_KEY"] || process.env["GEMINI_API_KEY"];
-
-  if (apiKey) {
-    try {
-      const stock = await stockSnapshot();
-
-      const system = `You are the metallurgical and procurement assistant for ${company.name}, a Mumbai-based specialist stockist and exporter of critical corrosion-resistant alloy (CRA) piping components — nickel alloy, duplex, super duplex and stainless — with companion carbon and low-temperature steel supplied alongside them.
-
-Answer questions about metallurgy, corrosion, piping standards (ASTM, ASME, API, EN, NORSOK, NACE MR0175 / ISO 15156), material selection, certification and supply capability.
-
-RULES:
-- Be concise, technical and direct. Quote standards, UNS numbers and limits precisely.
-- Never state Trishul is NORSOK certified; describe NORSOK M-630 as a specification sourced against.
-- Close with useful next step links: /rfq, /stock, /cad, /landed-cost, /materials/<slug>, or /products/<slug>.
-
-${catalogueContext()}
-
-LIVE STOCK:
-${stock}`;
-
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{ role: "system", content: system }, ...input.messages],
-          max_tokens: 900,
-        }),
-      });
-
-      if (res.ok) {
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-        const reply = data.choices?.[0]?.message?.content?.trim();
-        if (reply) return { reply };
-      }
-    } catch (err) {
-      console.warn("[assistant] AI gateway call failed, falling back to metallurgical expert engine:", err);
-    }
-  }
-
-  // Robust, always-available local expert metallurgical engine
+  // Built-in expert metallurgical engine providing accurate specification answers
   const reply = expertMetallurgicalDesk(query);
   return { reply };
 }
