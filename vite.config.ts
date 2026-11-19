@@ -7,37 +7,29 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import type { Plugin } from "vite";
 
-const isBuild =
-  process.env.NODE_ENV === "production" ||
-  Boolean(process.env.VERCEL) ||
-  process.argv.some((arg) => arg === "build" || arg.endsWith("build"));
-
 function expressBackendPlugin(): Plugin {
   return {
     name: "express-backend-plugin",
+    apply(config, { command }) {
+      return command === "serve";
+    },
     async configureServer(server) {
-      if (isBuild) return;
       try {
-        const serverPath = "./server/index.js";
-        const initPath = "./server/db/init.js";
-        const { default: app } = await import(/* @vite-ignore */ serverPath);
-        const { initDatabase } = await import(/* @vite-ignore */ initPath);
+        const { default: app } = await import("./server/index.js");
+        const { initDatabase } = await import("./server/db/init.js");
         await initDatabase().catch((e: any) => console.warn("[DB Init Notice]:", e?.message));
-        server.middlewares.use(app);
+        server.middlewares.use(app as any);
         console.log("[Trishul Dev] Express API mounted directly into Vite dev server.");
       } catch (err) {
         console.error("[Trishul Dev] Failed to mount Express in Vite:", err);
       }
     },
     async configurePreviewServer(server) {
-      if (isBuild) return;
       try {
-        const serverPath = "./server/index.js";
-        const initPath = "./server/db/init.js";
-        const { default: app } = await import(/* @vite-ignore */ serverPath);
-        const { initDatabase } = await import(/* @vite-ignore */ initPath);
+        const { default: app } = await import("./server/index.js");
+        const { initDatabase } = await import("./server/db/init.js");
         await initDatabase().catch((e: any) => console.warn("[DB Init Notice]:", e?.message));
-        server.middlewares.use(app);
+        server.middlewares.use(app as any);
         console.log("[Trishul Preview] Express API mounted directly into Vite preview server.");
       } catch (err) {
         console.error("[Trishul Preview] Failed to mount Express in Vite:", err);
@@ -48,7 +40,7 @@ function expressBackendPlugin(): Plugin {
 
 export default defineConfig({
   vite: {
-    plugins: isBuild ? [] : [expressBackendPlugin()],
+    plugins: [expressBackendPlugin()],
     build: {
       rollupOptions: {
         external: ["sqlite3", "better-sqlite3"],

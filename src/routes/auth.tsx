@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Breadcrumbs, Section, SectionHead } from "@/components/site/parts";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -253,22 +253,28 @@ function AuthPage() {
     }
   };
 
-  // Initialize Google Identity Services (GSI) One Tap / credential handler
+  // Initialize Google Identity Services (GSI) One Tap / credential handler (guarded against duplicate calls)
+  const completeSignInRef = useRef(completeGoogleSignIn);
+  completeSignInRef.current = completeGoogleSignIn;
+  const gsiInitializedRef = useRef(false);
+
   useEffect(() => {
     if (typeof window === "undefined" || !window.google?.accounts?.id) return;
+    if (gsiInitializedRef.current) return;
+    gsiInitializedRef.current = true;
     try {
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: async (response: any) => {
           if (response?.credential) {
-            await completeGoogleSignIn({ credential: response.credential });
+            await completeSignInRef.current({ credential: response.credential });
           }
         },
       });
     } catch (e) {
       console.warn("[GSI Init Notice]:", e);
     }
-  }, [completeGoogleSignIn]);
+  }, []);
 
   const handleGoogleSignIn = () => {
     setError(null);
