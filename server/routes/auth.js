@@ -73,6 +73,12 @@ router.post('/register', async (req, res) => {
 
     const token = await createSession(userId, res);
 
+    // Link any previous guest RFQs to this new account
+    await run(
+      'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
+      [userId, cleanEmail]
+    ).catch(() => {});
+
     const user = {
       id: userId,
       email: cleanEmail,
@@ -139,6 +145,12 @@ router.post('/login', async (req, res) => {
 
     const token = await createSession(user.id, res);
 
+    // Link any previous guest RFQs to this account
+    await run(
+      'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
+      [user.id, cleanEmail]
+    ).catch(() => {});
+
     return res.json({
       success: true,
       message: 'Signed in successfully.',
@@ -189,14 +201,15 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 /**
  * Standard trusted callback URL resolver
- * Never derives from untrusted request headers
+ * Never derives from untrusted third-party hosts or Lovable proxies
  */
-function getTrustedCallbackUrl() {
+function getTrustedCallbackUrl(req) {
   if (process.env.GOOGLE_CALLBACK_URL && process.env.GOOGLE_CALLBACK_URL.trim()) {
     return process.env.GOOGLE_CALLBACK_URL.trim();
   }
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://trishulmetal.lovable.app/api/auth/google/callback';
+  if (req && typeof req.get === 'function' && req.get('host')) {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    return `${proto}://${req.get('host')}/api/auth/google/callback`;
   }
   return 'http://localhost:8080/api/auth/google/callback';
 }
@@ -207,7 +220,7 @@ function getTrustedCallbackUrl() {
  * Generates cryptographic state and PKCE challenge (RFC 7636)
  */
 router.get('/google', (req, res) => {
-  const callbackUrl = getTrustedCallbackUrl();
+  const callbackUrl = getTrustedCallbackUrl(req);
 
   const state = crypto.randomBytes(24).toString('hex');
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
@@ -270,7 +283,7 @@ router.get('/google/callback', async (req, res) => {
       );
     }
 
-    const callbackUrl = getTrustedCallbackUrl();
+    const callbackUrl = getTrustedCallbackUrl(req);
     const codeVerifier = req.cookies?.oauth_verifier;
 
     // Clean up temporary OAuth cookies
@@ -407,6 +420,13 @@ router.get('/google/callback', async (req, res) => {
     ).catch(() => {});
 
     await createSession(userId, res);
+
+    // Link any previous guest RFQs to this account
+    await run(
+      'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
+      [userId, cleanEmail]
+    ).catch(() => {});
+
     return res.redirect('/portal');
   } catch (err) {
     console.error('[Google OAuth Callback Error]:', err);
@@ -555,6 +575,12 @@ router.post('/google', async (req, res) => {
     ).catch(() => {});
 
     const token = await createSession(userId, res);
+
+    // Link any previous guest RFQs to this account
+    await run(
+      'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
+      [userId, cleanEmail]
+    ).catch(() => {});
 
     const user = await get(
       `SELECT id, email, full_name, company, phone, role, avatar_url, last_login_at, created_at

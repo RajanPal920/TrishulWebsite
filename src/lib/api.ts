@@ -98,6 +98,38 @@ export interface CustomerOrder {
   updated_at: string;
 }
 
+export interface RfqInquiryItem {
+  id: string;
+  reference: string;
+  confirmation_token?: string | null;
+  company: string;
+  contact_name: string;
+  email: string;
+  phone?: string | null;
+  country?: string | null;
+  incoterm?: string | null;
+  delivery_port?: string | null;
+  target_lead_time?: string | null;
+  project_name?: string | null;
+  message?: string | null;
+  certification?: string | null;
+  testing?: string[] | null;
+  items: Array<{
+    material?: string;
+    product?: string;
+    size?: string;
+    rating?: string;
+    facing?: string;
+    quantity?: string;
+    unit?: string;
+    cutLength?: string;
+    processing?: string[];
+  }>;
+  attachments?: Array<{ name: string; path: string; size: number }> | null;
+  status: string;
+  created_at: string;
+}
+
 export class ApiError extends Error {
   status: number;
   data: any;
@@ -318,6 +350,14 @@ export const api = {
 
     async getOrder(id: string): Promise<{ order: CustomerOrder }> {
       return request<{ order: CustomerOrder }>(`/api/customer/orders/${id}`);
+    },
+
+    async getRfqs(): Promise<{ rfqs: RfqInquiryItem[] }> {
+      return request<{ rfqs: RfqInquiryItem[] }>('/api/customer/rfqs');
+    },
+
+    async getRfq(id: string): Promise<{ rfq: RfqInquiryItem }> {
+      return request<{ rfq: RfqInquiryItem }>(`/api/customer/rfqs/${id}`);
     },
   },
 

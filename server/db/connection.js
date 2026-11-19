@@ -27,6 +27,7 @@ export const sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
 // MySQL connection pool (Primary production engine)
 let mysqlPool = null;
 let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
+let connectionPromise = null;
 
 try {
   const host = process.env.DB_HOST || '127.0.0.1';
@@ -49,15 +50,17 @@ try {
   });
 
   // Test MySQL connection eagerly
-  mysqlPool.getConnection()
+  connectionPromise = mysqlPool.getConnection()
     .then((conn) => {
       activeEngine = 'mysql';
       console.log(`[DB] Successfully connected to MySQL database: ${database} at ${host}:${port}`);
       conn.release();
+      return true;
     })
     .catch((err) => {
       activeEngine = 'sqlite';
       console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly running on SQLite engine.`);
+      return false;
     });
 } catch (poolErr) {
   activeEngine = 'sqlite';
@@ -82,6 +85,7 @@ function normalizeParamsForMySQL(params) {
  * Execute a query that returns multiple rows
  */
 export async function all(sql, params = []) {
+  if (connectionPromise) await connectionPromise;
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
@@ -108,6 +112,7 @@ export async function all(sql, params = []) {
  * Execute a query that returns a single row
  */
 export async function get(sql, params = []) {
+  if (connectionPromise) await connectionPromise;
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
@@ -133,6 +138,7 @@ export async function get(sql, params = []) {
  * Execute an INSERT, UPDATE, or DELETE query
  */
 export async function run(sql, params = []) {
+  if (connectionPromise) await connectionPromise;
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [result] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));

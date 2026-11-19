@@ -186,5 +186,6 @@ CREATE TABLE IF NOT EXISTS rfq_requests (
   confirmation_token VARCHAR(100) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_rfq_reference (reference),
-  INDEX idx_rfq_email (email)
+  INDEX idx_rfq_email (email),
+  INDEX idx_rfq_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

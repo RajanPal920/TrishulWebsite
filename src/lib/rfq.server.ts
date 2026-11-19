@@ -93,21 +93,53 @@ export async function persistRfq(input: RfqInput): Promise<{ reference: string; 
     stored.push({ name: file.name, path, size: file.size });
   }
 
-  const { run } = await import("../../server/db/connection.js");
+  const { run, get } = await import("../../server/db/connection.js");
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+
+  // 1. Identify authenticated customer securely from session cookie
+  let userId: string | null = null;
+  try {
+    const { getCookie } = await import("@tanstack/react-start/server");
+    const sessionToken = getCookie("trishul_session");
+    if (sessionToken) {
+      const session = await get(
+        "SELECT user_id FROM user_sessions WHERE token = ?",
+        [sessionToken]
+      );
+      if (session?.user_id) {
+        userId = session.user_id;
+      }
+    }
+  } catch {
+    // In environments where getCookie is not accessible, fall through
+  }
+
+  // 2. Fallback: If not authenticated via cookie, check if customer email is already registered
+  if (!userId && input.email) {
+    try {
+      const registeredUser = await get(
+        "SELECT id FROM users WHERE LOWER(email) = LOWER(?)",
+        [input.email.trim()]
+      );
+      if (registeredUser?.id) {
+        userId = registeredUser.id;
+      }
+    } catch {}
+  }
 
   try {
     await run(
       `INSERT INTO rfq_requests (
-        id, reference, confirmation_token, company, contact_name,
+        id, reference, user_id, confirmation_token, company, contact_name,
         email, phone, country, incoterm, delivery_port, target_lead_time,
         project_name, message, certification, testing, items, attachments,
         status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?)`,
       [
         id,
         reference,
+        userId,
         confirmationToken,
         input.company,
         input.contactName,

@@ -119,6 +119,16 @@ router.get('/stats', async (req, res) => {
       [req.user.id]
     );
 
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+    const rfqStats = await get(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN status = 'Submitted' THEN 1 ELSE 0 END) as submitted,
+         SUM(CASE WHEN status != 'Submitted' AND status != 'Closed' THEN 1 ELSE 0 END) as active
+       FROM rfq_requests WHERE user_id = ? OR (user_id IS NULL AND LOWER(email) = ?)`,
+      [req.user.id, userEmail]
+    );
+
     return res.json({
       productRequests: {
         total: productStats?.total || 0,
@@ -138,11 +148,17 @@ router.get('/stats', async (req, res) => {
         total: orderStats?.total || 0,
         active: orderStats?.active || 0,
       },
+      rfqs: {
+        total: rfqStats?.total || 0,
+        submitted: rfqStats?.submitted || 0,
+        active: rfqStats?.active || 0,
+      },
       summary: {
         totalRequests: (productStats?.total || 0) + (materialStats?.total || 0),
         pendingReview: (productStats?.pending || 0) + (materialStats?.pending || 0),
         openInquiries: inquiryStats?.open || 0,
         totalOrders: orderStats?.total || 0,
+        totalRfqs: rfqStats?.total || 0,
       },
     });
   } catch (err) {
@@ -532,6 +548,72 @@ router.get('/orders/:id', async (req, res) => {
   } catch (err) {
     console.error('[Customer Order Detail Error]:', err);
     return res.status(500).json({ error: 'Failed to retrieve order details.' });
+  }
+});
+
+/**
+ * GET /api/customer/rfqs
+ * Retrieve all RFQ inquiries belonging to the authenticated customer
+ */
+router.get('/rfqs', async (req, res) => {
+  try {
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+    const rfqs = await all(
+      `SELECT id, reference, confirmation_token, company, contact_name, email, phone, country,
+              incoterm, delivery_port, target_lead_time, project_name, message, certification,
+              testing, items, attachments, status, created_at
+       FROM rfq_requests
+       WHERE user_id = ? OR (user_id IS NULL AND LOWER(email) = ?)
+       ORDER BY created_at DESC`,
+      [req.user.id, userEmail]
+    );
+
+    // Safely parse JSON fields
+    const parsedRfqs = (rfqs || []).map((r) => ({
+      ...r,
+      items: typeof r.items === 'string' ? JSON.parse(r.items || '[]') : (r.items || []),
+      testing: typeof r.testing === 'string' ? JSON.parse(r.testing || '[]') : (r.testing || []),
+      attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments || '[]') : (r.attachments || []),
+    }));
+
+    return res.json({ rfqs: parsedRfqs });
+  } catch (err) {
+    console.error('[Customer RFQs GET Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve your RFQ inquiries.' });
+  }
+});
+
+/**
+ * GET /api/customer/rfqs/:id
+ * Retrieve complete details for a specific RFQ inquiry
+ */
+router.get('/rfqs/:id', async (req, res) => {
+  try {
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+    const rfq = await get(
+      `SELECT id, reference, confirmation_token, company, contact_name, email, phone, country,
+              incoterm, delivery_port, target_lead_time, project_name, message, certification,
+              testing, items, attachments, status, created_at
+       FROM rfq_requests
+       WHERE (id = ? OR reference = ?) AND (user_id = ? OR (user_id IS NULL AND LOWER(email) = ?))`,
+      [req.params.id, req.params.id, req.user.id, userEmail]
+    );
+
+    if (!rfq) {
+      return res.status(404).json({ error: 'Inquiry not found or access denied.' });
+    }
+
+    return res.json({
+      rfq: {
+        ...rfq,
+        items: typeof rfq.items === 'string' ? JSON.parse(rfq.items || '[]') : (rfq.items || []),
+        testing: typeof rfq.testing === 'string' ? JSON.parse(rfq.testing || '[]') : (rfq.testing || []),
+        attachments: typeof rfq.attachments === 'string' ? JSON.parse(rfq.attachments || '[]') : (rfq.attachments || []),
+      },
+    });
+  } catch (err) {
+    console.error('[Customer RFQ Detail Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve inquiry details.' });
   }
 });
 

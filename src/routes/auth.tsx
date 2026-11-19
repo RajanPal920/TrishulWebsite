@@ -234,6 +234,23 @@ function AuthPage() {
     }
   };
 
+  // Initialize Google Identity Services (GSI) One Tap / credential handler
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.google?.accounts?.id) return;
+    try {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response: any) => {
+          if (response?.credential) {
+            await completeGoogleSignIn({ credential: response.credential });
+          }
+        },
+      });
+    } catch (e) {
+      console.warn("[GSI Init Notice]:", e);
+    }
+  }, [completeGoogleSignIn]);
+
   const handleGoogleSignIn = () => {
     setError(null);
     setNotice(null);
@@ -241,7 +258,37 @@ function AuthPage() {
 
     if (typeof window === "undefined") return;
 
-    // Direct to official backend Google OAuth 2.0 authorization endpoint
+    // 1. Prefer Google Identity Services (GIS) native account selection dialog
+    // Shows all available Google accounts in the user's browser with prompt=select_account
+    if (window.google?.accounts?.oauth2) {
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: "openid email profile",
+          prompt: "select_account",
+          callback: async (response) => {
+            if (response.error) {
+              setBusy(false);
+              if (response.error !== "popup_closed_by_user") {
+                setError(`Google Sign-In: ${response.error}`);
+              }
+              return;
+            }
+            if (response.access_token) {
+              await completeGoogleSignIn({ accessToken: response.access_token });
+            } else {
+              setBusy(false);
+            }
+          },
+        });
+        client.requestAccessToken({ prompt: "select_account" });
+        return;
+      } catch (clientErr: any) {
+        console.warn("[Google Client OAuth Token Notice, falling back to redirect]:", clientErr);
+      }
+    }
+
+    // 2. Direct to official backend Google OAuth 2.0 authorization endpoint
     // Uses trusted GOOGLE_CALLBACK_URL, PKCE (RFC 7636), and CSRF state validation
     window.location.href = "/api/auth/google";
   };

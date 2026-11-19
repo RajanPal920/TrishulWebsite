@@ -14,6 +14,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Shield,
+  FileText,
+  Eye,
+  X,
+  Building,
+  Mail,
+  Phone,
+  Calendar,
 } from "lucide-react";
 import { Breadcrumbs, Section } from "@/components/site/parts";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,9 +32,17 @@ import {
   type CustomerStats,
   type ActivityItem,
   type CustomerOrder,
+  type RfqInquiryItem,
 } from "@/lib/api";
 
+interface PortalSearch {
+  tab?: SectionKey;
+}
+
 export const Route = createFileRoute("/portal")({
+  validateSearch: (search: Record<string, unknown>): PortalSearch => ({
+    ...(typeof search["tab"] === "string" ? { tab: search["tab"] as SectionKey } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Customer Dashboard & Management Portal | Trishul Metals & Alloys" },
@@ -44,6 +59,7 @@ export const Route = createFileRoute("/portal")({
 
 type SectionKey =
   | "overview"
+  | "rfqs"
   | "profile"
   | "products"
   | "materials"
@@ -56,16 +72,44 @@ type SectionKey =
 const fieldClass =
   "motion-field mt-1.5 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
 
+function getStatusBadge(status: string) {
+  const s = status.toLowerCase();
+  if (s.includes("approved") || s.includes("fulfilled") || s.includes("resolved") || s.includes("answered")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
+        <CheckCircle2 className="h-3 w-3" />
+        {status}
+      </span>
+    );
+  }
+  if (s.includes("review") || s.includes("pending") || s.includes("open") || s.includes("submitted")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400">
+        <Clock className="h-3 w-3" />
+        {status}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-sky-400">
+      <AlertCircle className="h-3 w-3" />
+      {status}
+    </span>
+  );
+}
+
 function CustomerPortalPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const { user, loading: authLoading, logout, updateProfile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<SectionKey>("overview");
+  const [activeTab, setActiveTab] = useState<SectionKey>(search.tab || "overview");
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [productRequests, setProductRequests] = useState<ProductRequestItem[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequestItem[]>([]);
   const [inquiries, setInquiries] = useState<InquiryItem[]>([]);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [rfqs, setRfqs] = useState<RfqInquiryItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -73,6 +117,7 @@ function CustomerPortalPage() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [showInquiryModal, setShowInquiryModal] = useState(false);
+  const [selectedRfq, setSelectedRfq] = useState<RfqInquiryItem | null>(null);
   const [repeatTarget, setRepeatTarget] = useState<{
     type: "product" | "material";
     item: ProductRequestItem | MaterialRequestItem;
@@ -107,13 +152,14 @@ function CustomerPortalPage() {
     if (!user) return;
     setLoadingData(true);
     try {
-      const [statsRes, prodsRes, matsRes, inqRes, actRes, ordersRes] = await Promise.all([
+      const [statsRes, prodsRes, matsRes, inqRes, actRes, ordersRes, rfqsRes] = await Promise.all([
         api.customer.getStats().catch(() => null),
         api.customer.getProductRequests().catch(() => ({ requests: [] })),
         api.customer.getMaterialRequests().catch(() => ({ requests: [] })),
         api.customer.getInquiries().catch(() => ({ inquiries: [] })),
         api.customer.getRecentActivity().catch(() => ({ activity: [] })),
         api.customer.getOrders().catch(() => ({ orders: [] })),
+        api.customer.getRfqs().catch(() => ({ rfqs: [] })),
       ]);
 
       if (statsRes) setStats(statsRes);
@@ -122,6 +168,7 @@ function CustomerPortalPage() {
       setInquiries(inqRes.inquiries || []);
       setActivity(actRes.activity || []);
       setOrders(ordersRes.orders || []);
+      setRfqs(rfqsRes.rfqs || []);
     } catch (err) {
       console.error("[Portal Data Load Error]:", err);
     } finally {
@@ -217,32 +264,6 @@ function CustomerPortalPage() {
     void navigate({ to: "/" });
   };
 
-  const getStatusBadge = (status: string) => {
-    const s = status.toLowerCase();
-    if (s.includes("approved") || s.includes("fulfilled") || s.includes("resolved") || s.includes("answered")) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
-          <CheckCircle2 className="h-3 w-3" />
-          {status}
-        </span>
-      );
-    }
-    if (s.includes("review") || s.includes("pending") || s.includes("open")) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400">
-          <Clock className="h-3 w-3" />
-          {status}
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-sky-400">
-        <AlertCircle className="h-3 w-3" />
-        {status}
-      </span>
-    );
-  };
-
   return (
     <>
       <Breadcrumbs items={[{ label: "Customer Portal" }]} />
@@ -303,6 +324,30 @@ function CustomerPortalPage() {
                 >
                   <UserIcon className="h-4 w-4" />
                   <span>My Profile</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("rfqs")}
+                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "rfqs"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-4 w-4" />
+                    <span>My RFQ Inquiries</span>
+                  </div>
+                  {rfqs.length > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        activeTab === "rfqs" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {rfqs.length}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -512,8 +557,24 @@ function CustomerPortalPage() {
                   </div>
                 </div>
 
-                {/* 4 Stat Cards */}
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {/* Stat Cards */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-5 sm:grid-cols-3">
+                  <div
+                    onClick={() => setActiveTab("rfqs")}
+                    className="cursor-pointer rounded-sm border border-border bg-card p-4 transition-colors hover:border-primary/60"
+                  >
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                      <span>RFQ Inquiries</span>
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {rfqs.length}
+                    </p>
+                    <p className="mt-1 text-[11px] text-primary">
+                      {rfqs.filter((r) => r.status === "Submitted").length} submitted · view all →
+                    </p>
+                  </div>
+
                   <div className="rounded-sm border border-border bg-card p-4">
                     <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                       Product Requests
@@ -540,13 +601,13 @@ function CustomerPortalPage() {
 
                   <div className="rounded-sm border border-border bg-card p-4">
                     <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Active Quotes
+                      Active Orders
                     </p>
                     <p className="mt-2 text-2xl font-bold text-foreground">
-                      {(stats?.summary?.pendingReview ?? 0)}
+                      {orders.length}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      In evaluation pipeline
+                    <p className="mt-1 text-[11px] text-emerald-400">
+                      {orders.filter((o) => o.status !== "Delivered" && o.status !== "Cancelled").length} in progress
                     </p>
                   </div>
 
@@ -612,79 +673,271 @@ function CustomerPortalPage() {
 
             {/* 2. MY PROFILE SECTION */}
             {activeTab === "profile" && (
-              <div className="rounded-sm border border-border bg-card p-6">
-                <h3 className="text-base font-semibold text-foreground">My Profile</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Update your contact and company information for RFQ routing and certification records.
-                </p>
+              <div className="space-y-6">
+                {/* Customer Information Top Card */}
+                <div className="rounded-sm border border-border bg-gradient-to-r from-card via-card/95 to-background p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                    <div className="relative">
+                      {user?.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.fullName || "User Avatar"}
+                          className="h-16 w-16 rounded-full border-2 border-primary object-cover shadow-sm"
+                        />
+                      ) : (
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary bg-primary/15 text-lg font-bold text-primary shadow-sm">
+                          {(user?.fullName || user?.email || "TM").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
 
-                {profileNotice && (
-                  <div className="mt-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
-                    {profileNotice}
+                    <div className="flex-1 space-y-1.5 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-xl font-bold text-foreground truncate">
+                          {user?.fullName || "Valued Customer"}
+                        </h2>
+                        <span className="rounded-sm bg-primary/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary font-semibold">
+                          {user?.role === "admin" ? "Administrator" : "Verified Customer"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Building className="h-3.5 w-3.5 text-primary/70" />
+                        <span>{user?.company || "Company not specified"}</span>
+                      </p>
+
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs text-muted-foreground border-t border-border/50">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Mail className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                          <span className="truncate">{user?.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                          <span>{user?.phone || "Phone not provided"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                          <span>
+                            Member since:{" "}
+                            {user?.createdAt
+                              ? new Date(user.createdAt).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 sm:mt-0 sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("rfqs")}
+                        className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground shadow-sm"
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span>My RFQ Inquiries ({rfqs.length})</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profile Edit Form Card */}
+                <div className="rounded-sm border border-border bg-card p-6">
+                  <h3 className="text-base font-semibold text-foreground">Contact & Company Settings</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Update your official contact details used for RFQ routing, test certificates, and dispatch notifications.
+                  </p>
+
+                  {profileNotice && (
+                    <div className="mt-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
+                      {profileNotice}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleProfileSubmit} className="mt-6 max-w-lg space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Full Name *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Company Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profileCompany}
+                        onChange={(e) => setProfileCompany(e.target.value)}
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Registered Work Email (Permanent)
+                      </label>
+                      <input
+                        disabled
+                        type="email"
+                        value={user?.email || ""}
+                        className={`${fieldClass} opacity-60 cursor-not-allowed`}
+                      />
+                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                        Email address is tied to your verified account and quotation records. Contact support to change.
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={profileBusy}
+                      className="rounded-sm bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      {profileBusy ? "Saving…" : "Save Profile"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* 3. MY RFQ INQUIRIES SECTION */}
+            {activeTab === "rfqs" && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-card p-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">My RFQ Inquiries</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Track and review all multi-item Request for Quotations (RFQs) submitted through the website.
+                    </p>
+                  </div>
+                  <Link
+                    to="/rfq"
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Submit New RFQ</span>
+                  </Link>
+                </div>
+
+                {rfqs.length === 0 ? (
+                  <div className="rounded-sm border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                    <FileText className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">
+                      You haven't submitted any inquiries yet.
+                    </p>
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-4">
+                      Submit your piping specifications, MTO spreadsheet, or drawing files to receive an itemized quotation.
+                    </p>
+                    <Link
+                      to="/rfq"
+                      className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Submit New RFQ</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-sm border border-border bg-card">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border bg-muted/40 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="p-3">Inquiry Reference</th>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3">Material / Grade</th>
+                          <th className="p-3">Quantity</th>
+                          <th className="p-3">Submission Date & Time</th>
+                          <th className="p-3">Inquiry Status</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {rfqs.map((rfq) => {
+                          const primaryItem = rfq.items?.[0];
+                          const itemSummary =
+                            rfq.items && rfq.items.length > 1
+                              ? `${primaryItem?.product || "Piping Specification"} (+${rfq.items.length - 1} more items)`
+                              : primaryItem?.product || "Piping Specification";
+                          const materialSummary =
+                            rfq.items && rfq.items.length > 1
+                              ? `${primaryItem?.material || "Alloy"} (+${rfq.items.length - 1})`
+                              : primaryItem?.material || "—";
+                          const quantitySummary =
+                            rfq.items && rfq.items.length > 1
+                              ? `${rfq.items.reduce((acc, it) => acc + (parseFloat(it.quantity || "0") || 0), 0) || rfq.items.length} total units`
+                              : primaryItem?.quantity
+                              ? `${primaryItem.quantity} ${primaryItem.unit || "pcs"}`
+                              : "—";
+
+                          const createdDate = new Date(rfq.created_at);
+                          const formattedDate = createdDate.toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          });
+                          const formattedTime = createdDate.toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          });
+
+                          return (
+                            <tr key={rfq.id} className="transition-colors hover:bg-muted/30">
+                              <td className="p-3 font-mono font-semibold text-primary">
+                                {rfq.reference}
+                              </td>
+                              <td className="p-3 font-medium text-foreground max-w-[200px] truncate">
+                                {itemSummary}
+                              </td>
+                              <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                                {materialSummary}
+                              </td>
+                              <td className="p-3 text-foreground font-mono">
+                                {quantitySummary}
+                              </td>
+                              <td className="p-3 text-muted-foreground text-[11px]">
+                                {formattedDate}, {formattedTime}
+                              </td>
+                              <td className="p-3">
+                                {getStatusBadge(rfq.status)}
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedRfq(rfq)}
+                                  className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  <span>View Details</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
-
-                <form onSubmit={handleProfileSubmit} className="mt-6 max-w-lg space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Full Name *
-                    </label>
-                    <input
-                      required
-                      type="text"
-                      value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      value={profileCompany}
-                      onChange={(e) => setProfileCompany(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Registered Work Email (Permanent)
-                    </label>
-                    <input
-                      disabled
-                      type="email"
-                      value={user?.email || ""}
-                      className={`${fieldClass} opacity-60 cursor-not-allowed`}
-                    />
-                    <span className="mt-1 block text-[10px] text-muted-foreground">
-                      Email address is linked to your account identity. Contact support to change.
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={profilePhone}
-                      onChange={(e) => setProfilePhone(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={profileBusy}
-                    className="rounded-sm bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
-                  >
-                    {profileBusy ? "Saving…" : "Save Profile"}
-                  </button>
-                </form>
               </div>
             )}
 
@@ -1284,6 +1537,14 @@ function CustomerPortalPage() {
           }}
         />
       )}
+
+      {/* MODAL: View RFQ Details */}
+      {selectedRfq && (
+        <RfqDetailModal
+          rfq={selectedRfq}
+          onClose={() => setSelectedRfq(null)}
+        />
+      )}
     </>
   );
 }
@@ -1291,6 +1552,194 @@ function CustomerPortalPage() {
 // ----------------------------------------------------------------------
 // SUB-MODALS
 // ----------------------------------------------------------------------
+
+function RfqDetailModal({ rfq, onClose }: { rfq: RfqInquiryItem; onClose: () => void }) {
+  const createdDate = new Date(rfq.created_at);
+  const formattedDate = createdDate.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const formattedTime = createdDate.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="relative my-8 w-full max-w-3xl rounded-sm border border-border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4 pr-8">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="font-mono text-base font-bold text-primary">{rfq.reference}</span>
+              {getStatusBadge(rfq.status)}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Submitted on {formattedDate} at {formattedTime}
+            </p>
+          </div>
+        </div>
+
+        {/* Customer & Company Details */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 rounded-sm border border-border bg-muted/20 p-3.5 text-xs">
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Contact Person</span>
+            <span className="font-medium text-foreground">{rfq.contact_name}</span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Company</span>
+            <span className="font-medium text-foreground">{rfq.company}</span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Email</span>
+            <span className="font-medium text-foreground truncate block">{rfq.email}</span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Phone</span>
+            <span className="font-medium text-foreground">{rfq.phone || "—"}</span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Country</span>
+            <span className="font-medium text-foreground">{rfq.country || "—"}</span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Project Name</span>
+            <span className="font-medium text-foreground">{rfq.project_name || "—"}</span>
+          </div>
+        </div>
+
+        {/* Commercial & Shipping Terms */}
+        {(rfq.incoterm || rfq.delivery_port || rfq.target_lead_time) && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-sm border border-border bg-muted/10 p-3 text-xs">
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Incoterm</span>
+              <span className="font-medium text-foreground">{rfq.incoterm || "—"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Delivery Port</span>
+              <span className="font-medium text-foreground">{rfq.delivery_port || "—"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">Target Lead Time</span>
+              <span className="font-medium text-foreground">{rfq.target_lead_time || "—"}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Product Items Table */}
+        <div className="mt-5">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Requested Products & Materials ({rfq.items?.length || 0})
+          </h4>
+          <div className="overflow-x-auto rounded-sm border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="p-2.5">#</th>
+                  <th className="p-2.5">Material / Grade</th>
+                  <th className="p-2.5">Product Type</th>
+                  <th className="p-2.5">Size</th>
+                  <th className="p-2.5">Rating / Facing</th>
+                  <th className="p-2.5">Quantity</th>
+                  <th className="p-2.5">Processing / Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rfq.items && rfq.items.length > 0 ? (
+                  rfq.items.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-muted/30">
+                      <td className="p-2.5 font-mono text-muted-foreground">{idx + 1}</td>
+                      <td className="p-2.5 font-semibold text-foreground">{item.material || "—"}</td>
+                      <td className="p-2.5 text-foreground">{item.product || "—"}</td>
+                      <td className="p-2.5 font-mono">{item.size || "—"}</td>
+                      <td className="p-2.5 font-mono text-[11px] text-muted-foreground">
+                        {[item.rating, item.facing].filter(Boolean).join(" / ") || "—"}
+                      </td>
+                      <td className="p-2.5 font-mono font-medium text-foreground">
+                        {item.quantity ? `${item.quantity} ${item.unit || "pcs"}` : "—"}
+                      </td>
+                      <td className="p-2.5 text-[11px] text-muted-foreground">
+                        {item.cutLength ? `Cut length: ${item.cutLength}. ` : ""}
+                        {item.processing && item.processing.length > 0 ? item.processing.join(", ") : "Standard"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-muted-foreground">No specific line items recorded.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Quality, Testing & Certification */}
+        {(rfq.certification || (rfq.testing && rfq.testing.length > 0)) && (
+          <div className="mt-4 rounded-sm border border-border p-3 text-xs space-y-2">
+            {rfq.certification && (
+              <div>
+                <span className="font-semibold text-foreground">Certification: </span>
+                <span className="text-muted-foreground">{rfq.certification}</span>
+              </div>
+            )}
+            {rfq.testing && rfq.testing.length > 0 && (
+              <div>
+                <span className="font-semibold text-foreground">Testing Scope: </span>
+                <span className="text-muted-foreground">{rfq.testing.join(" · ")}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Customer Message */}
+        {rfq.message && (
+          <div className="mt-4 rounded-sm border border-border bg-muted/10 p-3 text-xs">
+            <span className="font-semibold text-foreground block mb-1">Message / Requirements:</span>
+            <p className="text-muted-foreground whitespace-pre-line leading-relaxed">{rfq.message}</p>
+          </div>
+        )}
+
+        {/* Attachments */}
+        {rfq.attachments && rfq.attachments.length > 0 && (
+          <div className="mt-4">
+            <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Attached Files ({rfq.attachments.length})
+            </h5>
+            <div className="flex flex-wrap gap-2">
+              {rfq.attachments.map((att, i) => (
+                <div key={i} className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-3 py-1.5 text-xs text-foreground">
+                  <FileText className="h-3.5 w-3.5 text-primary" />
+                  <span>{att.name}</span>
+                  {att.size ? <span className="font-mono text-[10px] text-muted-foreground">({(att.size / 1024).toFixed(0)} KB)</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-sm border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function NewProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [productName, setProductName] = useState("");
