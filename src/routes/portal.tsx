@@ -24,6 +24,7 @@ import {
   type InquiryItem,
   type CustomerStats,
   type ActivityItem,
+  type CustomerOrder,
 } from "@/lib/api";
 
 export const Route = createFileRoute("/portal")({
@@ -47,8 +48,10 @@ type SectionKey =
   | "products"
   | "materials"
   | "inquiries"
+  | "orders"
   | "repeat"
-  | "settings";
+  | "settings"
+  | "security";
 
 const fieldClass =
   "motion-field mt-1.5 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
@@ -62,6 +65,7 @@ function CustomerPortalPage() {
   const [productRequests, setProductRequests] = useState<ProductRequestItem[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequestItem[]>([]);
   const [inquiries, setInquiries] = useState<InquiryItem[]>([]);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -103,19 +107,21 @@ function CustomerPortalPage() {
     if (!user) return;
     setLoadingData(true);
     try {
-      const [statsRes, prodsRes, matsRes, inqRes, actRes] = await Promise.all([
+      const [statsRes, prodsRes, matsRes, inqRes, actRes, ordersRes] = await Promise.all([
         api.customer.getStats().catch(() => null),
         api.customer.getProductRequests().catch(() => ({ requests: [] })),
         api.customer.getMaterialRequests().catch(() => ({ requests: [] })),
         api.customer.getInquiries().catch(() => ({ inquiries: [] })),
         api.customer.getRecentActivity().catch(() => ({ activity: [] })),
+        api.customer.getOrders().catch(() => ({ orders: [] })),
       ]);
 
       if (statsRes) setStats(statsRes);
-      setProductRequests(prodsRes.requests);
-      setMaterialRequests(matsRes.requests);
-      setInquiries(inqRes.inquiries);
-      setActivity(actRes.activity);
+      setProductRequests(prodsRes.requests || []);
+      setMaterialRequests(matsRes.requests || []);
+      setInquiries(inqRes.inquiries || []);
+      setActivity(actRes.activity || []);
+      setOrders(ordersRes.orders || []);
     } catch (err) {
       console.error("[Portal Data Load Error]:", err);
     } finally {
@@ -373,6 +379,30 @@ function CustomerPortalPage() {
 
                 <button
                   type="button"
+                  onClick={() => setActiveTab("orders")}
+                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "orders"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Package className="h-4 w-4" />
+                    <span>My Purchases & Orders</span>
+                  </div>
+                  {orders.length > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        activeTab === "orders" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {orders.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveTab("repeat")}
                   className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
                     activeTab === "repeat"
@@ -396,6 +426,31 @@ function CustomerPortalPage() {
                   <Settings className="h-4 w-4" />
                   <span>Account Settings</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("security")}
+                  className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "security"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>Login & Security</span>
+                </button>
+
+                {user?.role === "admin" && (
+                  <div className="pt-2">
+                    <Link
+                      to="/admin"
+                      className="flex w-full items-center justify-between rounded-sm border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary transition-opacity hover:opacity-90"
+                    >
+                      <span>Owner Admin Console</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
+                )}
 
                 <div className="border-t border-border pt-2 mt-2">
                   <button
@@ -916,7 +971,185 @@ function CustomerPortalPage() {
               </div>
             )}
 
-            {/* 7. ACCOUNT SETTINGS SECTION */}
+            {/* 6. PURCHASES & ORDERS SECTION */}
+            {activeTab === "orders" && (
+              <div className="space-y-4">
+                <div className="rounded-sm border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground">My Confirmed Purchases & Orders</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Track fabrication status, material testing inspection, and dispatch delivery for confirmed POs.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    {orders.length === 0 ? (
+                      <div className="rounded-sm border border-border/80 bg-background/50 p-8 text-center">
+                        <Package className="mx-auto h-10 w-10 text-muted-foreground/60" />
+                        <h4 className="mt-3 text-sm font-semibold text-foreground">No Confirmed Purchase Orders Yet</h4>
+                        <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
+                          Once your cut-to-size RFQ is approved and quoted, your purchase order and dispatch bill of lading (B/L) will appear here in real time.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowProductModal(true)}
+                          className="mt-4 rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)]"
+                        >
+                          Submit New Cut-to-Size RFQ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
+                            <tr>
+                              <th className="px-4 py-3">PO Number</th>
+                              <th className="px-4 py-3">Item Details</th>
+                              <th className="px-4 py-3">Order Value</th>
+                              <th className="px-4 py-3">Status</th>
+                              <th className="px-4 py-3">Tracking / B/L</th>
+                              <th className="px-4 py-3">Order Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {orders.map((ord) => (
+                              <tr key={ord.id} className="hover:bg-muted/20">
+                                <td className="px-4 py-3 font-mono font-bold text-primary">{ord.order_number}</td>
+                                <td className="px-4 py-3">
+                                  <p className="font-semibold text-foreground">{ord.title}</p>
+                                  {ord.description && (
+                                    <p className="text-[11px] text-muted-foreground">{ord.description}</p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 font-mono font-bold text-foreground">
+                                  ₹{parseFloat(String(ord.total_amount)).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-sm bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] uppercase text-emerald-400">
+                                    {ord.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                                  {ord.tracking_number || "In Fabrication"}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                                  {new Date(ord.created_at).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 7. LOGIN & SECURITY SECTION */}
+            {activeTab === "security" && (
+              <div className="rounded-sm border border-border bg-card p-6">
+                <h3 className="text-base font-semibold text-foreground">Login, Identity & Session Security</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  View your authenticated session details, identity provider credentials, and access keys.
+                </p>
+
+                <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-sm border border-border bg-background/50 p-4">
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground">Authentication Protocol</span>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {user?.role === "admin" ? "Owner Administrator" : "Verified Customer"}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">{user?.email}</p>
+                  </div>
+
+                  <div className="rounded-sm border border-border bg-background/50 p-4">
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground">Active Session Security</span>
+                    <p className="mt-1 font-mono text-xs text-emerald-400">HTTP-Only Encrypted Cookie</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Protection: SameSite=Lax, 30-Day TTL</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-border pt-6">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Change Password</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Update your account password (min 8 characters).
+                  </p>
+
+                  {pwdNotice && (
+                    <div className="mt-3 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
+                      {pwdNotice}
+                    </div>
+                  )}
+                  {pwdError && (
+                    <div className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                      {pwdError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handlePasswordSubmit} className="mt-4 max-w-lg space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Current Password
+                      </label>
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="Current password"
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        New Password (min 8 characters) *
+                      </label>
+                      <input
+                        required
+                        minLength={8}
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="New strong password"
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Confirm New Password *
+                      </label>
+                      <input
+                        required
+                        minLength={8}
+                        type="password"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        placeholder="Confirm new password"
+                        className={fieldClass}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={pwdBusy}
+                      className="rounded-sm bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      {pwdBusy ? "Updating Password…" : "Update Password"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* 8. ACCOUNT SETTINGS SECTION */}
             {activeTab === "settings" && (
               <div className="rounded-sm border border-border bg-card p-6">
                 <h3 className="text-base font-semibold text-foreground">Account Security & Settings</h3>

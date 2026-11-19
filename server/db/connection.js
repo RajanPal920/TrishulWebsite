@@ -1,4 +1,5 @@
 import sqlite3 from 'sqlite3';
+import mysql from 'mysql2/promise';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -13,24 +14,92 @@ if (!fs.existsSync(DB_DIR)) {
 
 const DB_PATH = path.join(DB_DIR, 'trishul.db');
 
-export const db = new sqlite3.Database(DB_PATH, (err) => {
+// SQLite connection (fallback & local development)
+export const sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
-    console.error('[DB] Failed to connect to SQLite database:', err);
+    console.warn('[DB Notice] SQLite fallback initialization:', err.message);
   } else {
-    // Enable WAL mode and foreign key enforcement
-    db.run('PRAGMA foreign_keys = ON;');
-    db.run('PRAGMA journal_mode = WAL;');
+    sqliteDb.run('PRAGMA foreign_keys = ON;');
+    sqliteDb.run('PRAGMA journal_mode = WAL;');
   }
 });
+
+// MySQL connection pool (Primary production engine)
+let mysqlPool = null;
+let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
+
+try {
+  const host = process.env.DB_HOST || '127.0.0.1';
+  const port = parseInt(process.env.DB_PORT || '3306', 10);
+  const user = process.env.DB_USER || 'root';
+  const password = process.env.DB_PASSWORD || '';
+  const database = process.env.DB_NAME || 'trishul_db';
+
+  mysqlPool = mysql.createPool({
+    host,
+    port,
+    user,
+    password,
+    database,
+    waitForConnections: true,
+    connectionLimit: 15,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
+  });
+
+  // Test MySQL connection eagerly
+  mysqlPool.getConnection()
+    .then((conn) => {
+      activeEngine = 'mysql';
+      console.log(`[DB] Successfully connected to MySQL database: ${database} at ${host}:${port}`);
+      conn.release();
+    })
+    .catch((err) => {
+      activeEngine = 'sqlite';
+      console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly running on SQLite engine.`);
+    });
+} catch (poolErr) {
+  activeEngine = 'sqlite';
+  console.warn('[DB Notice] MySQL pool initialization notice:', poolErr.message);
+}
+
+function normalizeParamsForMySQL(params) {
+  if (!Array.isArray(params)) return params;
+  return params.map((val) => {
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+      }
+    }
+    return val;
+  });
+}
 
 /**
  * Execute a query that returns multiple rows
  */
-export function all(sql, params = []) {
+export async function all(sql, params = []) {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
+      return rows;
+    } catch (err) {
+      // If error is MySQL-specific or lost connection, fallback to SQLite
+      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
+        activeEngine = 'sqlite';
+        return all(sql, params);
+      }
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    sqliteDb.all(sql, params, (err, rows) => {
       if (err) reject(err);
-      else resolve(rows);
+      else resolve(rows || []);
     });
   });
 }
@@ -38,11 +107,24 @@ export function all(sql, params = []) {
 /**
  * Execute a query that returns a single row
  */
-export function get(sql, params = []) {
+export async function get(sql, params = []) {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
+      return rows && rows.length > 0 ? rows[0] : null;
+    } catch (err) {
+      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
+        activeEngine = 'sqlite';
+        return get(sql, params);
+      }
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    sqliteDb.get(sql, params, (err, row) => {
       if (err) reject(err);
-      else resolve(row);
+      else resolve(row || null);
     });
   });
 }
@@ -50,9 +132,27 @@ export function get(sql, params = []) {
 /**
  * Execute an INSERT, UPDATE, or DELETE query
  */
-export function run(sql, params = []) {
+export async function run(sql, params = []) {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [result] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
+      return {
+        lastID: result.insertId,
+        insertId: result.insertId,
+        changes: result.affectedRows,
+        affectedRows: result.affectedRows,
+      };
+    } catch (err) {
+      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
+        activeEngine = 'sqlite';
+        return run(sql, params);
+      }
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    sqliteDb.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
     });
@@ -60,16 +160,27 @@ export function run(sql, params = []) {
 }
 
 /**
- * Execute a batch of raw SQL statements (schema migrations, multi-statement scripts)
+ * Execute a raw SQL statement
  */
-export function exec(sql) {
+export async function exec(sql) {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    await mysqlPool.query(sql);
+    return;
+  }
+
   return new Promise((resolve, reject) => {
-    db.exec(sql, (err) => {
+    sqliteDb.exec(sql, (err) => {
       if (err) reject(err);
       else resolve();
     });
   });
 }
+
+export function getActiveEngine() {
+  return activeEngine;
+}
+
+export const db = sqliteDb;
 
 export default {
   db,
@@ -78,4 +189,5 @@ export default {
   get,
   run,
   exec,
+  getActiveEngine,
 };

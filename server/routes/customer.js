@@ -111,6 +111,14 @@ router.get('/stats', async (req, res) => {
       [req.user.id]
     );
 
+    const orderStats = await get(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN status IN ('Processing', 'Manufactured', 'Inspection Ready', 'Dispatched') THEN 1 ELSE 0 END) as active
+       FROM orders WHERE user_id = ?`,
+      [req.user.id]
+    );
+
     return res.json({
       productRequests: {
         total: productStats?.total || 0,
@@ -126,10 +134,15 @@ router.get('/stats', async (req, res) => {
         total: inquiryStats?.total || 0,
         open: inquiryStats?.open || 0,
       },
+      orders: {
+        total: orderStats?.total || 0,
+        active: orderStats?.active || 0,
+      },
       summary: {
         totalRequests: (productStats?.total || 0) + (materialStats?.total || 0),
         pendingReview: (productStats?.pending || 0) + (materialStats?.pending || 0),
         openInquiries: inquiryStats?.open || 0,
+        totalOrders: orderStats?.total || 0,
       },
     });
   } catch (err) {
@@ -479,6 +492,46 @@ router.get('/recent-activity', async (req, res) => {
   } catch (err) {
     console.error('[Recent Activity Error]:', err);
     return res.status(500).json({ error: 'Failed to load activity feed.' });
+  }
+});
+
+/**
+ * GET /api/customer/orders
+ */
+router.get('/orders', async (req, res) => {
+  try {
+    const orders = await all(
+      `SELECT id, order_number, title, description, total_amount, currency, status, tracking_number, delivery_date, created_at, updated_at
+       FROM orders
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [req.user.id]
+    );
+    return res.json({ orders: orders || [] });
+  } catch (err) {
+    console.error('[Customer Orders Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve customer orders.' });
+  }
+});
+
+/**
+ * GET /api/customer/orders/:id
+ */
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const order = await get(
+      `SELECT id, order_number, title, description, total_amount, currency, status, tracking_number, delivery_date, created_at, updated_at
+       FROM orders
+       WHERE id = ? AND user_id = ?`,
+      [req.params.id, req.user.id]
+    );
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    return res.json({ order });
+  } catch (err) {
+    console.error('[Customer Order Detail Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve order details.' });
   }
 });
 

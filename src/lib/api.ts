@@ -84,6 +84,20 @@ export interface ActivityItem {
   detail?: string;
 }
 
+export interface CustomerOrder {
+  id: string;
+  order_number: string;
+  title: string;
+  description?: string | null;
+  total_amount: number;
+  currency: string;
+  status: 'Processing' | 'Manufactured' | 'Inspection Ready' | 'Dispatched' | 'Delivered' | 'Cancelled';
+  tracking_number?: string | null;
+  delivery_date?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export class ApiError extends Error {
   status: number;
   data: any;
@@ -296,6 +310,108 @@ export const api = {
 
     async getRecentActivity(): Promise<{ activity: ActivityItem[] }> {
       return request<{ activity: ActivityItem[] }>('/api/customer/recent-activity');
+    },
+
+    async getOrders(): Promise<{ orders: CustomerOrder[] }> {
+      return request<{ orders: CustomerOrder[] }>('/api/customer/orders');
+    },
+
+    async getOrder(id: string): Promise<{ order: CustomerOrder }> {
+      return request<{ order: CustomerOrder }>(`/api/customer/orders/${id}`);
+    },
+  },
+
+  admin: {
+    async getOverview(): Promise<{ stats: any; recentUsers: any[]; recentRequests: any[] }> {
+      return request('/api/admin/overview');
+    },
+
+    async getCustomers(query?: { search?: string; limit?: number; offset?: number }): Promise<{ customers: any[]; total: number }> {
+      const p = new URLSearchParams();
+      if (query?.search) p.set('search', query.search);
+      if (query?.limit) p.set('limit', String(query.limit));
+      if (query?.offset) p.set('offset', String(query.offset));
+      return request(`/api/admin/customers${p.toString() ? `?${p.toString()}` : ''}`);
+    },
+
+    async getCustomer(id: string): Promise<any> {
+      return request(`/api/admin/customers/${id}`);
+    },
+
+    async getLoginActivity(): Promise<{ loginActivity: any[] }> {
+      return request('/api/admin/login-activity');
+    },
+
+    async getProductRequests(): Promise<{ requests: any[] }> {
+      return request('/api/admin/product-requests');
+    },
+
+    async updateProductRequest(id: string, data: { status?: string; quotation_amount?: number; notes?: string }): Promise<any> {
+      return request(`/api/admin/product-requests/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getMaterialRequests(): Promise<{ requests: any[] }> {
+      return request('/api/admin/material-requests');
+    },
+
+    async updateMaterialRequest(id: string, data: { status?: string; notes?: string }): Promise<any> {
+      return request(`/api/admin/material-requests/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getInquiries(): Promise<{ inquiries: any[] }> {
+      return request('/api/admin/inquiries');
+    },
+
+    async respondInquiry(id: string, data: { response: string; status?: string }): Promise<any> {
+      return request(`/api/admin/inquiries/${id}/respond`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getOrders(): Promise<{ orders: any[] }> {
+      return request('/api/admin/orders');
+    },
+
+    async createOrder(data: any): Promise<any> {
+      return request('/api/admin/orders', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async updateOrder(id: string, data: any): Promise<any> {
+      return request(`/api/admin/orders/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getStock(): Promise<{ stock: any[] }> {
+      return request('/api/admin/stock');
+    },
+
+    async addStock(data: any): Promise<any> {
+      return request('/api/admin/stock', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async deleteStock(id: string): Promise<any> {
+      return request(`/api/admin/stock/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    async getActivityLogs(): Promise<{ logs: any[] }> {
+      return request('/api/admin/activity-logs');
     },
   },
 

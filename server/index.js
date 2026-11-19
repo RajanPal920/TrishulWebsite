@@ -9,6 +9,7 @@ import { initDatabase } from './db/init.js';
 import { authenticateToken } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import customerRoutes from './routes/customer.js';
+import adminRoutes from './routes/admin.js';
 import publicRoutes from './routes/public.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,7 @@ app.use('/api', authenticateToken);
 // Mount API routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/customer', customerRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api', publicRoutes);
 
 // Health check endpoint

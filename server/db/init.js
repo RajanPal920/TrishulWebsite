@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'node:url';
 import { db, exec, get, run, all } from './connection.js';
 
@@ -66,11 +67,46 @@ export async function initDatabase() {
   await exec(schemaSql);
   console.log('[DB] Schema applied successfully.');
 
-  // Safe schema migration for last_login_at
+  // Safe schema migration for last_login_at, role, and login_method
   try {
     await run('ALTER TABLE users ADD COLUMN last_login_at TEXT');
   } catch {
     // Column already exists, safe to ignore
+  }
+  try {
+    await run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'");
+  } catch {
+    // Column already exists, safe to ignore
+  }
+  try {
+    await run("ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password'");
+  } catch {
+    // Column already exists, safe to ignore
+  }
+  try {
+    await run('ALTER TABLE product_requests ADD COLUMN quotation_amount REAL');
+  } catch {
+    // Column already exists, safe to ignore
+  }
+  try {
+    await run('ALTER TABLE material_requests ADD COLUMN quotation_amount REAL');
+  } catch {
+    // Column already exists, safe to ignore
+  }
+
+  // Ensure default Owner Administrator exists
+  const adminEmail = 'admin@trishulmetal.com';
+  const existingAdmin = await get('SELECT id FROM users WHERE email = ?', [adminEmail]);
+  if (!existingAdmin) {
+    const adminId = 'admin-trishul-001';
+    const adminHash = await bcrypt.hash('Admin@Trishul2026!', 10);
+    const now = new Date().toISOString();
+    await run(
+      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, ?)`,
+      [adminId, adminEmail, adminHash, 'Owner Administrator', 'Trishul Metals & Alloys', '+91 22 2389 4500', now, now]
+    );
+    console.log('[DB] Seeded default Owner Administrator: admin@trishulmetal.com');
   }
 
   // Check if stock_items is populated

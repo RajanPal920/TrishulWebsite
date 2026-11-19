@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'customer',
   google_id TEXT UNIQUE,
   avatar_url TEXT,
+  login_method TEXT DEFAULT 'password',
   last_login_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS product_requests (
   specification TEXT,
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'Pending Review', -- 'Pending Review', 'Under Evaluation', 'Quotation Sent', 'Approved', 'Fulfilled', 'Closed'
+  quotation_amount REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -94,6 +96,7 @@ CREATE TABLE IF NOT EXISTS material_requests (
   specification TEXT,
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'Pending Review', -- 'Pending Review', 'Under Evaluation', 'Quoted', 'Approved', 'Closed'
+  quotation_amount REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -187,3 +190,51 @@ CREATE TABLE IF NOT EXISTS document_downloads (
   company TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 11. Customer Orders & Purchases Table
+CREATE TABLE IF NOT EXISTS orders (
+  id TEXT PRIMARY KEY,
+  order_number TEXT UNIQUE NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_request_id TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  total_amount REAL NOT NULL DEFAULT 0.0,
+  currency TEXT NOT NULL DEFAULT 'INR',
+  status TEXT NOT NULL DEFAULT 'Processing', -- 'Processing', 'Manufactured', 'Inspection Ready', 'Dispatched', 'Delivered', 'Cancelled'
+  tracking_number TEXT,
+  delivery_date TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+
+-- 12. User Login Activity Table
+CREATE TABLE IF NOT EXISTS user_login_activity (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  login_method TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  status TEXT NOT NULL DEFAULT 'success',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_activity_user ON user_login_activity(user_id);
+
+-- 13. Admin Activity Logs Table
+CREATE TABLE IF NOT EXISTS admin_activity_logs (
+  id TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL,
+  admin_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  details TEXT,
+  ip_address TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_admin ON admin_activity_logs(admin_id);

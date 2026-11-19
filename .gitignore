@@ -39,3 +39,8 @@ dist-ssr
 
 # Vercel
 .vercel/
+
+# SQLite WAL and SHM temporary files
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/*.db-journal

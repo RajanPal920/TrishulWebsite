@@ -125,7 +125,17 @@ router.post('/login', async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    await run('UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?', [now, now, user.id]);
+    await run('UPDATE users SET last_login_at = ?, login_method = \'password\', updated_at = ? WHERE id = ?', [now, now, user.id]);
+
+    // Record login activity in user_login_activity
+    const activityId = crypto.randomUUID();
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    await run(
+      `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
+       VALUES (?, ?, 'password', ?, ?, 'success', ?)`,
+      [activityId, user.id, ip, userAgent, now]
+    ).catch(() => {});
 
     const token = await createSession(user.id, res);
 
@@ -371,6 +381,7 @@ router.get('/google/callback', async (req, res) => {
         `UPDATE users
          SET google_id = COALESCE(google_id, ?),
              avatar_url = COALESCE(?, avatar_url),
+             login_method = 'google',
              last_login_at = ?,
              updated_at = ?
          WHERE id = ?`,
@@ -379,11 +390,21 @@ router.get('/google/callback', async (req, res) => {
     } else {
       userId = crypto.randomUUID();
       await run(
-        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, last_login_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'customer', ?, ?, ?)`,
+        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, login_method, last_login_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'customer', 'google', ?, ?, ?)`,
         [userId, cleanEmail, cleanName, googleId, picture, now, now, now]
       );
     }
+
+    // Record login activity in user_login_activity
+    const actId = crypto.randomUUID();
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || '127.0.0.1';
+    const clientAgent = req.headers['user-agent'] || 'Unknown';
+    await run(
+      `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
+       VALUES (?, ?, 'google', ?, ?, 'success', ?)`,
+      [actId, userId, clientIp, clientAgent, now]
+    ).catch(() => {});
 
     await createSession(userId, res);
     return res.redirect('/portal');
@@ -508,6 +529,7 @@ router.post('/google', async (req, res) => {
         `UPDATE users
          SET google_id = COALESCE(google_id, ?),
              avatar_url = COALESCE(?, avatar_url),
+             login_method = 'google',
              last_login_at = ?,
              updated_at = ?
          WHERE id = ?`,
@@ -516,11 +538,21 @@ router.post('/google', async (req, res) => {
     } else {
       userId = crypto.randomUUID();
       await run(
-        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, last_login_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'customer', ?, ?, ?)`,
+        `INSERT INTO users (id, email, full_name, google_id, avatar_url, role, login_method, last_login_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'customer', 'google', ?, ?, ?)`,
         [userId, cleanEmail, cleanName, googleId, picture, now, now, now]
       );
     }
+
+    // Record login activity in user_login_activity
+    const actId = crypto.randomUUID();
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || '127.0.0.1';
+    const clientAgent = req.headers['user-agent'] || 'Unknown';
+    await run(
+      `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
+       VALUES (?, ?, 'google', ?, ?, 'success', ?)`,
+      [actId, userId, clientIp, clientAgent, now]
+    ).catch(() => {});
 
     const token = await createSession(userId, res);
 
