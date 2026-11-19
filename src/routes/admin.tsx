@@ -901,7 +901,7 @@ function AdminDashboardPage() {
                         <div key={c.id} className="py-2.5 text-xs">
                           <p className="font-semibold text-foreground">{c.full_name || "Customer"}</p>
                           <p className="font-mono text-[11px] text-muted-foreground">{c.email}</p>
-                          <p className="text-[10px] text-muted-foreground/80">{c.company || "Independent Buyer"}</p>
+                          <p className="text-[10px] text-[#F5F5F5]">{c.company || "Independent Buyer"}</p>
                         </div>
                       ))}
                     </div>
@@ -1085,7 +1085,7 @@ function AdminDashboardPage() {
                                   {c.phone}
                                 </span>
                               ) : (
-                                <span className="text-[11px] italic text-muted-foreground/60">
+                                <span className="text-[11px] italic text-[#EAEAEA]">
                                   Not Provided
                                 </span>
                               )}
@@ -1974,7 +1974,7 @@ function AdminDashboardPage() {
                                   {customerDetail?.customer?.phone || selectedCustomer.phone}
                                 </span>
                               ) : (
-                                <span className="text-muted-foreground/60 italic">Not Provided</span>
+                                <span className="text-[#EAEAEA] italic">Not Provided</span>
                               )}
                             </div>
 

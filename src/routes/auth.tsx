@@ -35,7 +35,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 const fieldClass =
-  "motion-field mt-2 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
+  "motion-field mt-2 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-[#EAEAEA] focus:border-primary focus:bg-background";
 
 function AuthPage() {
   const navigate = useNavigate();

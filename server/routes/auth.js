@@ -210,7 +210,7 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 /**
  * Standard trusted callback URL resolver
- * Never derives from untrusted third-party hosts or Lovable proxies
+ * Strictly derives from configured server host and protocol
  */
 function getTrustedCallbackUrl(req) {
   if (process.env.GOOGLE_CALLBACK_URL && process.env.GOOGLE_CALLBACK_URL.trim()) {
@@ -225,7 +225,7 @@ function getTrustedCallbackUrl(req) {
 
 /**
  * GET /api/auth/google
- * Official Google OAuth 2.0 authorization redirect (No Lovable or third-party brokers)
+ * Official Google OAuth 2.0 authorization redirect
  * Generates cryptographic state and PKCE challenge (RFC 7636)
  */
 router.get('/google', (req, res) => {

@@ -1,8 +1,31 @@
+import chemicalProcessingImg from "@/assets/industries/chemicalProcessing.jpg";
+import desalinationPlantsImg from "@/assets/industries/desalinationPlants.jpg";
+import fertilizerPlantImg from "@/assets/industries/fertilizerPlant.jpg";
+import fpsoProjectImg from "@/assets/industries/fpsoProject.jpg";
+import gasProcessingImg from "@/assets/industries/gasProcesssing.jpg";
+import heatExchangersImg from "@/assets/industries/heatExchangers.jpg";
+import highTemperatureImg from "@/assets/industries/highTemperature.jpg";
+import industrialProcessPlantsImg from "@/assets/industries/industrialProcessPlants.jpg";
+import lngPlantsImg from "@/assets/industries/lngPlants.jpg";
+import marineShipImg from "@/assets/industries/marine-Ship.jpg";
+import miningMineralImg from "@/assets/industries/mining-mineral.jpg";
+import offshoreOilGasImg from "@/assets/industries/oil_gas.jpeg.png";
+import onshoreOilImg from "@/assets/industries/onshore-oil.jpg";
+import petrochemicalPlantImg from "@/assets/industries/petrochemicalPlant.jpg";
+import powerGenerationImg from "@/assets/industries/powerGeneration.jpg";
+import pulpPaperImg from "@/assets/industries/pulp-paper.jpg";
+import refineriesImg from "@/assets/industries/refineries.jpg";
+import seawaterImg from "@/assets/industries/seawater.jpg";
+import sourServiceImg from "@/assets/industries/sourService.jpg";
+import subseaEngineeringImg from "@/assets/industries/subseaEnginerring.jpg";
+
 export interface Industry {
   slug: string;
   name: string;
   tagline: string;
   summary: string;
+  image: string;
+  imageAlt: string;
   environment: string[];
   alloys: string[];
   products: string[];
@@ -14,6 +37,8 @@ export interface Industry {
 export const industries: Industry[] = [
   {
     slug: "offshore-oil-and-gas",
+    image: offshoreOilGasImg,
+    imageAlt: "Offshore platform topside and process piping in harsh marine environment",
     name: "Offshore Oil & Gas",
     tagline: "Topside and platform piping for chloride, sour and firewater duty",
     summary:
@@ -57,6 +82,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "onshore-oil-and-gas",
+    image: onshoreOilImg,
+    imageAlt: "Onshore oil and gas gathering lines, manifold piping and separator systems",
     name: "Onshore Oil & Gas",
     tagline: "Wellhead, gathering and processing piping for sour and CO2 service",
     summary:
@@ -100,6 +127,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "subsea-engineering",
+    image: subseaEngineeringImg,
+    imageAlt: "Subsea manifolds, flowlines and seabed high-pressure CRA piping connections",
     name: "Subsea Engineering",
     tagline: "Manifolds, jumpers and connection systems for deepwater service",
     summary:
@@ -143,6 +172,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "refineries",
+    image: refineriesImg,
+    imageAlt: "Crude distillation units, hydrocrackers and heavy-wall refinery piping systems",
     name: "Refineries",
     tagline: "Crude, hydroprocessing and overhead systems across a wide corrosion map",
     summary:
@@ -186,6 +217,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "petrochemical-plants",
+    image: petrochemicalPlantImg,
+    imageAlt: "Petrochemical olefin synthesis, cracking furnaces and polymer piping networks",
     name: "Petrochemical Plants",
     tagline: "Cracking, polymerisation and derivative units with mixed chemical exposure",
     summary:
@@ -229,6 +262,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "lng-plants",
+    image: lngPlantsImg,
+    imageAlt: "Liquefied natural gas liquefaction trains and cryogenic storage piping",
     name: "LNG Plants",
     tagline: "Cryogenic liquefaction and regasification piping systems",
     summary:
@@ -272,6 +307,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "gas-processing",
+    image: gasProcessingImg,
+    imageAlt: "Natural gas sweetening, dehydration and acid gas removal piping installations",
     name: "Gas Processing",
     tagline: "Dehydration, sweetening and NGL recovery systems",
     summary:
@@ -315,6 +352,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "chemical-processing",
+    image: chemicalProcessingImg,
+    imageAlt: "Acid reaction vessels, aggressive media transfer and corrosive chemical processing spools",
     name: "Chemical Processing",
     tagline: "Acid, alkali and halogenated process environments",
     summary:
@@ -358,6 +397,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "desalination-plants",
+    image: desalinationPlantsImg,
+    imageAlt: "Reverse osmosis high-pressure membrane headers and thermal desalination plant piping",
     name: "Desalination Plants",
     tagline: "Seawater intake, RO trains and MSF evaporator piping",
     summary:
@@ -401,6 +442,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "marine-and-shipbuilding",
+    image: marineShipImg,
+    imageAlt: "Commercial shipbuilding, seawater ballast manifolds and vessel exhaust scrubber piping",
     name: "Marine & Shipbuilding",
     tagline: "Ballast, cargo, firewater and seawater cooling systems",
     summary:
@@ -444,6 +487,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "fpso-projects",
+    image: fpsoProjectImg,
+    imageAlt: "Floating Production Storage and Offloading hull topsides, turret swivel and process modules",
     name: "FPSO Projects",
     tagline: "Topside process modules and marine systems on floating production units",
     summary:
@@ -487,6 +532,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "heat-exchangers",
+    image: heatExchangersImg,
+    imageAlt: "Shell and tube heat exchangers, high-temperature tubesheets and cooling bundles",
     name: "Heat Exchangers",
     tagline: "Shell and tube, hairpin and air-cooled exchanger connections",
     summary:
@@ -530,6 +577,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "power-generation",
+    image: powerGenerationImg,
+    imageAlt: "Supercritical steam piping, combined cycle turbine headers and cooling loops",
     name: "Power Generation",
     tagline: "Boiler, steam, feedwater and cooling systems",
     summary:
@@ -573,6 +622,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "fertilizer-plants",
+    image: fertilizerPlantImg,
+    imageAlt: "Ammonia synthesis loops, urea reactor headers and nitric acid processing piping",
     name: "Fertilizer Plants",
     tagline: "Ammonia, urea and phosphoric acid production systems",
     summary:
@@ -616,6 +667,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "pulp-and-paper",
+    image: pulpPaperImg,
+    imageAlt: "Continuous digesters, bleach plant chlorine dioxide headers and chemical recovery piping",
     name: "Pulp & Paper",
     tagline: "Digester, bleach plant and recovery boiler systems",
     summary:
@@ -659,6 +712,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "mining-and-mineral-processing",
+    image: miningMineralImg,
+    imageAlt: "Acid leaching circuits, autoclave piping and abrasive slurry mineral processing lines",
     name: "Mining & Mineral Processing",
     tagline: "Leaching, autoclave and tailings systems",
     summary:
@@ -702,6 +757,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "industrial-process-plants",
+    image: industrialProcessPlantsImg,
+    imageAlt: "Specialty industrial processing plants, batch reactors and utility piping networks",
     name: "Industrial Process Plants",
     tagline: "General manufacturing, utilities and balance-of-plant piping",
     summary:
@@ -745,6 +802,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "seawater-systems",
+    image: seawaterImg,
+    imageAlt: "Seawater intake, chlorination distribution and offshore cooling water piping networks",
     name: "Seawater Systems",
     tagline: "Lift, cooling, firewater and ballast piping in natural seawater",
     summary:
@@ -788,6 +847,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "high-temperature-applications",
+    image: highTemperatureImg,
+    imageAlt: "Industrial pyrolysis furnaces, reformer headers and high-temperature thermal piping",
     name: "High-Temperature Applications",
     tagline: "Furnace, reformer and thermal processing components",
     summary:
@@ -831,6 +892,8 @@ export const industries: Industry[] = [
   },
   {
     slug: "sour-service-applications",
+    image: sourServiceImg,
+    imageAlt: "NACE MR0175 compliant H2S sour gas piping, gathering spools and wellhead CRA components",
     name: "Sour Service Applications",
     tagline: "H2S-bearing systems governed by NACE MR0175 / ISO 15156",
     summary:

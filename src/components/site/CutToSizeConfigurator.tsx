@@ -12,7 +12,7 @@ interface CutToSizeConfiguratorProps {
 }
 
 const inputClass =
-  "w-full min-w-0 rounded-sm border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary";
+  "w-full min-w-0 rounded-sm border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-[#EAEAEA] focus:border-primary";
 
 export function CutToSizeConfigurator({ grade, product, size = "" }: CutToSizeConfiguratorProps) {
   const panelId = useId();

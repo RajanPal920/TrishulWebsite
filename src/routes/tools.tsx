@@ -422,7 +422,7 @@ function InteractiveNpsTable({ onSelect, activeNps }: InteractiveTableProps) {
                           {r.s10.toFixed(2)} mm
                         </button>
                       ) : (
-                        <span className="text-muted-foreground/50">—</span>
+                        <span className="text-[#EAEAEA]">—</span>
                       )}
                     </td>
 
@@ -438,7 +438,7 @@ function InteractiveNpsTable({ onSelect, activeNps }: InteractiveTableProps) {
                           {r.s40.toFixed(2)} mm
                         </button>
                       ) : (
-                        <span className="text-muted-foreground/50">—</span>
+                        <span className="text-[#EAEAEA]">—</span>
                       )}
                     </td>
 
@@ -454,7 +454,7 @@ function InteractiveNpsTable({ onSelect, activeNps }: InteractiveTableProps) {
                           {r.s80.toFixed(2)} mm
                         </button>
                       ) : (
-                        <span className="text-muted-foreground/50">—</span>
+                        <span className="text-[#EAEAEA]">—</span>
                       )}
                     </td>
 
@@ -470,7 +470,7 @@ function InteractiveNpsTable({ onSelect, activeNps }: InteractiveTableProps) {
                           {r.s160.toFixed(2)} mm
                         </button>
                       ) : (
-                        <span className="text-muted-foreground/50">—</span>
+                        <span className="text-[#EAEAEA]">—</span>
                       )}
                     </td>
 
@@ -486,7 +486,7 @@ function InteractiveNpsTable({ onSelect, activeNps }: InteractiveTableProps) {
                           {r.xxs.toFixed(2)} mm
                         </button>
                       ) : (
-                        <span className="text-muted-foreground/50">—</span>
+                        <span className="text-[#EAEAEA]">—</span>
                       )}
                     </td>
 

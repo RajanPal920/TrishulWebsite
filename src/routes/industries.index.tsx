@@ -44,6 +44,8 @@ function IndustriesIndex() {
               params={{ slug: i.slug }}
               title={i.name}
               body={i.tagline}
+              image={i.image}
+              imageAlt={i.imageAlt}
               interactive
             />
           ))}

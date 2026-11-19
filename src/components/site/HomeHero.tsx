@@ -91,15 +91,15 @@ export function HomeHero() {
             <span className="text-primary block">your specification.</span>
           </h1>
 
-          <p className="mt-4 sm:mt-5 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-zinc-300 font-normal">
+          <p className="mt-4 sm:mt-5 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-[#F5F5F5] font-normal">
             Nickel alloy, duplex, super duplex and stainless steel Corrosion-Resistant Alloy (CRA) flanges and pipe fittings supplied against ASTM, ASME, NACE and applicable NORSOK M-630 requirements, with heat-traceable EN 10204 3.1 documentation.
           </p>
 
-          <p className="mt-2.5 sm:mt-3 text-[11px] sm:text-xs leading-normal text-zinc-400/80 font-normal">
+          <p className="mt-2.5 sm:mt-3 text-[11px] sm:text-xs leading-normal text-[#EAEAEA] font-normal">
             Materials available against applicable NORSOK M-630 requirements, subject to grade, product form, applicable MDS and manufacturer qualification.
           </p>
 
-          <p className="mt-3.5 sm:mt-4 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-zinc-100 font-medium">
+          <p className="mt-3.5 sm:mt-4 text-xs sm:text-sm md:text-[14.5px] leading-relaxed text-white font-medium">
             Supplied cut-to-size, saw-cut to exact lengths, end-bevelled and pre-machined to your drawing — so you skip in-house cutting waste and local machining delays.
           </p>
 
@@ -108,10 +108,10 @@ export function HomeHero() {
             <p className="font-mono text-[10.5px] sm:text-[11px] uppercase tracking-[0.16em] text-primary font-semibold">
               Custom cutting &amp; machining
             </p>
-            <p className="mt-1 text-xs sm:text-[13px] leading-relaxed text-zinc-200">
+            <p className="mt-1 text-xs sm:text-[13px] leading-relaxed text-[#F5F5F5]">
               Precision saw cutting · End bevelling (ASME B16.25) · Rough machining, boring &amp; facing
             </p>
-            <p className="mt-0.5 text-xs sm:text-[13px] leading-relaxed text-zinc-400">
+            <p className="mt-0.5 text-xs sm:text-[13px] leading-relaxed text-[#EAEAEA]">
               - Cut-to-drawing components — supply your length, tolerance or drawing.
             </p>
             <Link
@@ -132,7 +132,7 @@ export function HomeHero() {
             </Link>
             <Link
               to="/materials"
-              className="rounded-sm border border-primary/50 bg-black/40 px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-zinc-200 backdrop-blur-xs transition-colors hover:border-primary hover:text-white"
+              className="rounded-sm border border-primary/50 bg-black/40 px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white backdrop-blur-xs transition-colors hover:border-primary hover:text-white"
             >
               Browse 28 CRA grades
             </Link>

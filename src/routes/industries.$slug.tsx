@@ -54,11 +54,27 @@ function IndustryPage() {
         <Breadcrumbs
           items={[{ label: "Home", to: "/" }, { label: "Industries", to: "/industries" }, { label: i.name }]}
         />
-        <div className="mt-6 max-w-4xl">
-          <Eyebrow>Industry application</Eyebrow>
-          <h1 className="mt-4 text-4xl font-semibold leading-tight md:text-5xl">{i.name}</h1>
-          <p className="mt-4 text-lg text-muted-foreground">{i.tagline}</p>
-          <p className="mt-4 text-base leading-relaxed text-muted-foreground">{i.summary}</p>
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+          <div className="max-w-2xl">
+            <Eyebrow>Industry application</Eyebrow>
+            <h1 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl md:text-5xl text-white">{i.name}</h1>
+            <p className="mt-4 text-lg font-medium text-[#F5F5F5]">{i.tagline}</p>
+            <p className="mt-4 text-base leading-relaxed text-[#EAEAEA]">{i.summary}</p>
+          </div>
+          {i.image && (
+            <div className="relative aspect-[16/10] overflow-hidden rounded-md border border-border bg-card shadow-elevated">
+              <img
+                src={i.image}
+                alt={i.imageAlt || i.name}
+                loading="eager"
+                decoding="async"
+                width={1200}
+                height={750}
+                className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent pointer-events-none" />
+            </div>
+          )}
         </div>
       </Section>
 

@@ -63,15 +63,15 @@
 
   /* Deep graphite base */
   --background: oklch(0.16 0.014 255);
-  --foreground: oklch(0.96 0.004 250);
+  --foreground: #FFFFFF;
 
   --surface: oklch(0.204 0.015 255);
-  --surface-foreground: oklch(0.95 0.004 250);
+  --surface-foreground: #FFFFFF;
 
   --card: oklch(0.204 0.015 255);
-  --card-foreground: oklch(0.95 0.004 250);
+  --card-foreground: #FFFFFF;
   --popover: oklch(0.204 0.015 255);
-  --popover-foreground: oklch(0.95 0.004 250);
+  --popover-foreground: #FFFFFF;
 
   /* Trishul gold */
   --primary: oklch(0.74 0.093 82);
@@ -79,18 +79,18 @@
   --primary-glow: oklch(0.81 0.088 87);
 
   --secondary: oklch(0.26 0.016 255);
-  --secondary-foreground: oklch(0.94 0.004 250);
+  --secondary-foreground: #F5F5F5;
 
   --muted: oklch(0.25 0.014 255);
-  --muted-foreground: oklch(0.71 0.014 250);
+  --muted-foreground: #F5F5F5;
 
   --accent: oklch(0.28 0.02 255);
   --accent-foreground: oklch(0.9 0.05 85);
 
-  --steel: oklch(0.62 0.018 250);
+  --steel: #EAEAEA;
 
   --destructive: oklch(0.6 0.2 27);
-  --destructive-foreground: oklch(0.98 0.003 248);
+  --destructive-foreground: #FFFFFF;
 
   --border: oklch(0.31 0.014 255);
   --input: oklch(0.31 0.014 255);
@@ -103,11 +103,11 @@
   --chart-5: oklch(0.9 0.02 90);
 
   --sidebar: oklch(0.19 0.015 255);
-  --sidebar-foreground: oklch(0.94 0.004 250);
+  --sidebar-foreground: #FFFFFF;
   --sidebar-primary: oklch(0.74 0.093 82);
   --sidebar-primary-foreground: oklch(0.17 0.014 255);
   --sidebar-accent: oklch(0.26 0.016 255);
-  --sidebar-accent-foreground: oklch(0.94 0.004 250);
+  --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: oklch(0.31 0.014 255);
   --sidebar-ring: oklch(0.74 0.093 82);
 
@@ -128,6 +128,15 @@
 
 .dark {
   color-scheme: dark;
+  --foreground: #FFFFFF;
+  --surface-foreground: #FFFFFF;
+  --card-foreground: #FFFFFF;
+  --popover-foreground: #FFFFFF;
+  --secondary-foreground: #F5F5F5;
+  --muted-foreground: #F5F5F5;
+  --steel: #EAEAEA;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-accent-foreground: #FFFFFF;
 }
 
 @layer base {

@@ -70,7 +70,7 @@ type SectionKey =
   | "security";
 
 const fieldClass =
-  "motion-field mt-1.5 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
+  "motion-field mt-1.5 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-[#EAEAEA] focus:border-primary focus:bg-background";
 
 function getStatusBadge(status: string) {
   const s = status.toLowerCase();

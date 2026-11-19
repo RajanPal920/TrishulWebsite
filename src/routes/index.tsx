@@ -79,15 +79,6 @@ const featuredIndustrySlugs = [
   "lng-plants",
 ];
 
-const industryImages: Record<string, { src: string; alt: string }> = {
-  "offshore-oil-and-gas": { src: branchOutletFittings, alt: "Alloy branch outlet fittings used in offshore process piping systems" },
-  "desalination-plants": { src: weldedPipes, alt: "Corrosion-resistant welded pipe sections for desalination and seawater service" },
-  "subsea-engineering": { src: largeDiameterFlanges, alt: "Large machined alloy flange representative of subsea piping connections" },
-  refineries: { src: seamlessPipes, alt: "Heavy-wall seamless alloy pipes for refinery process service" },
-  "petrochemical-plants": { src: socketWeldFittings, alt: "Compact socket-weld alloy fittings for petrochemical piping" },
-  "lng-plants": { src: lowTemperaturePipes, alt: "Low-temperature alloy pipe stock for LNG and cryogenic service" },
-};
-
 const credentialBadgeLabels: Record<string, string> = {
   "iso-9001": "ISO 9001:2015",
   "iec-code": "Importer-Exporter Code (IEC)",
@@ -172,7 +163,7 @@ function Home() {
                 Standard austenitic stainless steel supplied alongside CRA grades for
                 mixed-metallurgy builds and projects requiring a single-source supplier.
               </p>
-              <p className="mt-2 text-xs text-muted-foreground/70">
+              <p className="mt-2 text-xs text-[#EAEAEA]">
                 {stainlessList.map((m) => m.name).join(" · ")}
               </p>
             </Link>
@@ -340,8 +331,8 @@ function Home() {
                     ? "RO, MSF and MED plant piping specified in duplex and super duplex for chloride and pitting resistance"
                     : industry.tagline
                 }
-                image={industryImages[industry.slug]?.src}
-                imageAlt={industryImages[industry.slug]?.alt}
+                image={industry.image}
+                imageAlt={industry.imageAlt}
                 interactive
               />
             );
