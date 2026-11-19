@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import craHero1920 from "@/assets/home/cra-components-hero-1920.webp";
-import craHero1280 from "@/assets/home/cra-components-hero-1280.webp";
+import craHero1920 from "@/assets/heroes/hero-home.jpg";
+import craHero1280 from "@/assets/heroes/hero-home.jpg";
 
 // Smooth count up animation that runs from initial (0) to final (end) whenever scrolled into view
 function CountUp({

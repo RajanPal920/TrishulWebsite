@@ -20,24 +20,20 @@ export const assistantSchema = z.object({
 export type AssistantInput = z.infer<typeof assistantSchema>;
 
 async function stockSnapshot(): Promise<string> {
-  const url = process.env["SUPABASE_URL"];
-  const key = process.env["SUPABASE_PUBLISHABLE_KEY"];
-  if (!url || !key) return "Live stock feed unavailable in this session.";
   try {
-    const res = await fetch(
-      `${url}/rest/v1/stock_items?select=grade,product,size,rating,spec,quantity,unit,status,location&limit=200`,
-      { headers: { apikey: key } },
+    const { all } = await import("../../server/db/connection.js");
+    const rows = await all(
+      "SELECT grade, product, size, rating, spec, quantity, unit, status, location FROM stock_items LIMIT 200"
     );
-    if (!res.ok) return "Live stock feed unavailable in this session.";
-    const rows = (await res.json()) as Record<string, unknown>[];
     if (!rows.length) return "No stock rows returned.";
     return rows
       .map(
-        (r) =>
+        (r: any) =>
           `${r["grade"]} | ${r["product"]} | ${r["size"]}${r["rating"] ? ` ${r["rating"]}` : ""} | ${r["spec"]} | ${r["quantity"]} ${r["unit"]} | ${r["status"]} | ${r["location"]}`,
       )
       .join("\n");
-  } catch {
+  } catch (err) {
+    console.warn("[Assistant Stock Warning]:", err);
     return "Live stock feed unavailable in this session.";
   }
 }

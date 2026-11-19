@@ -25,25 +25,19 @@ const escape = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export async function handleCadDownload(input: CadDownloadInput) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { run } = await import("../../server/db/connection.js");
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
 
-  const { error } = await supabaseAdmin.from("cad_downloads").insert({
-    part_code: input.partCode,
-    family: input.family,
-    standard: input.standard || null,
-    size: input.size || null,
-    spec: input.spec || null,
-    facing: input.facing || null,
-    material: input.material || null,
-    format: input.format,
-    name: input.name || null,
-    company: input.company || null,
-    email: input.email,
-    phone: input.phone,
-    user_agent: input.userAgent || null,
-    referrer: input.referrer || null,
-  });
-  if (error) throw new Error("Could not unlock the download. Please email us directly.");
+  try {
+    await run(
+      `INSERT INTO cad_downloads (id, part_code, email, name, company, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, input.partCode, input.email, input.name || null, input.company || null, now]
+    );
+  } catch (dbErr) {
+    console.warn("[CAD Download DB Warning]:", dbErr);
+  }
 
   try {
     const apiKey = process.env["LOVABLE_API_KEY"];

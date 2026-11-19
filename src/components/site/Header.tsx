@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, User as UserIcon } from "lucide-react";
 import { company, offices } from "@/data/company";
 import { BrandLogo } from "@/components/site/BrandLogo";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
   to: string;
@@ -129,6 +130,7 @@ function DesktopDropdown({
 export function Header() {
   const [open, setOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
@@ -224,12 +226,22 @@ export function Header() {
 
         {/* Action Buttons & Mobile Trigger */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <Link
-            to="/portal"
-            className="hidden lg:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
-          >
-            Customer login
-          </Link>
+          {user ? (
+            <Link
+              to="/portal"
+              className="hidden lg:inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs xl:text-sm font-medium text-primary transition-colors hover:bg-primary/20 whitespace-nowrap"
+            >
+              <UserIcon className="h-3.5 w-3.5" />
+              <span>Portal ({user.fullName?.split(" ")[0] || "Account"})</span>
+            </Link>
+          ) : (
+            <Link
+              to="/auth"
+              className="hidden lg:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
+            >
+              Customer login
+            </Link>
+          )}
           <Link
             to="/rfq"
             className="hidden lg:inline-flex rounded-sm bg-primary px-3.5 sm:px-4 py-1.5 text-xs xl:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 whitespace-nowrap"
@@ -349,13 +361,23 @@ export function Header() {
             {/* Mobile Actions */}
             <div className="border-t border-border pt-4 flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
-                <Link
-                  to="/portal"
-                  onClick={() => setOpen(false)}
-                  className="flex-1 text-center rounded-sm border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary"
-                >
-                  Customer login
-                </Link>
+                {user ? (
+                  <Link
+                    to="/portal"
+                    onClick={() => setOpen(false)}
+                    className="flex-1 text-center rounded-sm border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20"
+                  >
+                    Portal ({user.fullName?.split(" ")[0] || "Account"})
+                  </Link>
+                ) : (
+                  <Link
+                    to="/auth"
+                    onClick={() => setOpen(false)}
+                    className="flex-1 text-center rounded-sm border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary"
+                  >
+                    Customer login
+                  </Link>
+                )}
                 <Link
                   to="/rfq"
                   onClick={() => setOpen(false)}

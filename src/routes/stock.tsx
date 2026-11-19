@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Section, SectionHead, Breadcrumbs, CtaBand } from "@/components/site/parts";
-import { supabase } from "@/integrations/supabase/client";
+import { getStockItems, type StockRow } from "@/lib/stock.functions";
 
 export const Route = createFileRoute("/stock")({
   head: () => ({
@@ -24,24 +24,6 @@ export const Route = createFileRoute("/stock")({
   component: StockPage,
 });
 
-interface StockRow {
-  id: string;
-  grade: string;
-  grade_slug: string | null;
-  product: string;
-  product_slug: string | null;
-  category: string;
-  size: string;
-  rating: string | null;
-  spec: string;
-  quantity: number;
-  unit: string;
-  location: string;
-  status: string;
-  heat_ref: string | null;
-  verified_on: string;
-}
-
 const statusStyle: Record<string, string> = {
   ready: "border-primary/60 text-primary",
   limited: "border-amber-500/50 text-amber-400",
@@ -55,15 +37,7 @@ function StockPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stock-items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stock_items")
-        .select("*")
-        .order("category", { ascending: true })
-        .order("grade", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as StockRow[];
-    },
+    queryFn: () => getStockItems(),
   });
 
   const rows = data ?? [];

@@ -9,7 +9,7 @@ import { materials } from "@/data/materials";
 import { productTypes } from "@/data/products";
 import { submitRfq } from "@/lib/rfq.functions";
 import { rfqCertificationOptions, rfqProcessingOptions, rfqUnits } from "@/data/rfq-options";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 
 interface RfqSearch {
@@ -197,22 +197,20 @@ function Rfq() {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
   const [customer, setCustomer] = useState({ company: "", contactName: "", email: "", phone: "", country: "" });
 
   useEffect(() => {
-    void supabase.auth.getUser().then(async ({ data }) => {
-      const user = data.user;
-      if (!user?.email) return;
-      const { data: profile } = await supabase.from("profiles").select("company, contact_name, phone, country").eq("id", user.id).maybeSingle();
-      setCustomer({
-        company: profile?.company ?? "",
-        contactName: profile?.contact_name ?? "",
-        email: user.email ?? "",
-        phone: profile?.phone ?? "",
-        country: profile?.country ?? "",
-      });
-    });
-  }, []);
+    if (user) {
+      setCustomer((prev) => ({
+        ...prev,
+        company: user.company || prev.company,
+        contactName: user.fullName || prev.contactName,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone,
+      }));
+    }
+  }, [user]);
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));

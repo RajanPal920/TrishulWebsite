@@ -1,407 +1,1540 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import { Breadcrumbs, Section, SectionHead, SpecTable } from "@/components/site/parts";
-import { company } from "@/data/company";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, useMemo } from "react";
 import {
-  type PortalData,
-  getCertificateDownload,
-  getPortalData,
-  updateMyProfile,
-} from "@/lib/portal.functions";
-import { downloadRfqAcknowledgement, type RfqAcknowledgement } from "@/lib/rfq-acknowledgement";
-import { downloadRfqQuotation } from "@/lib/rfq-quotation";
+  LayoutDashboard,
+  User as UserIcon,
+  Package,
+  Layers,
+  HelpCircle,
+  Repeat,
+  Settings,
+  LogOut,
+  Plus,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Shield,
+} from "lucide-react";
+import { Breadcrumbs, Section } from "@/components/site/parts";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  api,
+  type ProductRequestItem,
+  type MaterialRequestItem,
+  type InquiryItem,
+  type CustomerStats,
+  type ActivityItem,
+} from "@/lib/api";
 
 export const Route = createFileRoute("/portal")({
-  ssr: false,
-  loader: async (): Promise<PortalData> => {
-    try {
-      return await getPortalData();
-    } catch {
-      return {
-        email: "portal@trishulmetal.com",
-        profile: {
-          company: "Trishul Metals & Alloys Client",
-          contact_name: "Customer",
-          phone: "",
-          country: "",
-        },
-        orders: [],
-        lines: [],
-        documents: [],
-        rfqs: [],
-      };
-    }
-  },
   head: () => ({
     meta: [
-      { title: "Customer Dashboard — RFQs, Orders & Certificates | Trishul Metals" },
-      { name: "description", content: "Trishul customer dashboard for quotation requests, order history, shipment details and certificates." },
-      { property: "og:title", content: "Customer Dashboard | Trishul Metals & Alloys" },
-      { property: "og:description", content: "Access to quotation requests, orders, shipment details and certificate records." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { title: "Customer Dashboard & Management Portal | Trishul Metals & Alloys" },
+      {
+        name: "description",
+        content: "Track cut-to-size RFQs, product requisitions, material specifications, and engineering inquiries.",
+      },
+      { property: "og:title", content: "Customer Portal | Trishul Metals & Alloys" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
-  component: PortalPage,
+  component: CustomerPortalPage,
 });
 
+type SectionKey =
+  | "overview"
+  | "profile"
+  | "products"
+  | "materials"
+  | "inquiries"
+  | "repeat"
+  | "settings";
 
-function PortalPage() {
-  const initial = Route.useLoaderData();
-  const saveProfile = useServerFn(updateMyProfile);
-  const downloadCertificate = useServerFn(getCertificateDownload);
-  const [data, setData] = useState<PortalData>(initial);
-  const [tab, setTab] = useState<"rfqs" | "orders" | "certificates" | "profile">("rfqs");
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+const fieldClass =
+  "motion-field mt-1.5 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:bg-background";
 
-  const profile = data.profile;
-  const rfqs = data.rfqs;
-  const orders = data.orders;
-  const docs = data.documents;
+function CustomerPortalPage() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading, logout, updateProfile } = useAuth();
 
-  async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setNotice(null);
-    const form = new FormData(event.currentTarget);
+  const [activeTab, setActiveTab] = useState<SectionKey>("overview");
+  const [stats, setStats] = useState<CustomerStats | null>(null);
+  const [productRequests, setProductRequests] = useState<ProductRequestItem[]>([]);
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequestItem[]>([]);
+  const [inquiries, setInquiries] = useState<InquiryItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Modals state
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [showInquiryModal, setShowInquiryModal] = useState(false);
+  const [repeatTarget, setRepeatTarget] = useState<{
+    type: "product" | "material";
+    item: ProductRequestItem | MaterialRequestItem;
+  } | null>(null);
+
+  // Profile Form state
+  const [profileName, setProfileName] = useState("");
+  const [profileCompany, setProfileCompany] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+
+  // Settings / Password Form state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [pwdNotice, setPwdNotice] = useState<string | null>(null);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdBusy, setPwdBusy] = useState(false);
+
+  // Sync profile form when user loads
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.fullName || "");
+      setProfileCompany(user.company || "");
+      setProfilePhone(user.phone || "");
+    }
+  }, [user]);
+
+  // Load portal data from backend
+  const loadPortalData = async () => {
+    if (!user) return;
+    setLoadingData(true);
     try {
-      await saveProfile({
-        data: {
-          company: String(form.get("company") ?? ""),
-          contactName: String(form.get("contactName") ?? ""),
-          phone: String(form.get("phone") ?? ""),
-          country: String(form.get("country") ?? ""),
-        },
-      });
-      const refreshed = await getPortalData();
-      setData(refreshed);
-      setNotice("Company details saved.");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The profile could not be saved.");
+      const [statsRes, prodsRes, matsRes, inqRes, actRes] = await Promise.all([
+        api.customer.getStats().catch(() => null),
+        api.customer.getProductRequests().catch(() => ({ requests: [] })),
+        api.customer.getMaterialRequests().catch(() => ({ requests: [] })),
+        api.customer.getInquiries().catch(() => ({ inquiries: [] })),
+        api.customer.getRecentActivity().catch(() => ({ activity: [] })),
+      ]);
+
+      if (statsRes) setStats(statsRes);
+      setProductRequests(prodsRes.requests);
+      setMaterialRequests(matsRes.requests);
+      setInquiries(inqRes.inquiries);
+      setActivity(actRes.activity);
+    } catch (err) {
+      console.error("[Portal Data Load Error]:", err);
     } finally {
-      setBusy(false);
+      setLoadingData(false);
     }
+  };
+
+  useEffect(() => {
+    if (user) {
+      void loadPortalData();
+    }
+  }, [user]);
+
+  // Redirect to /auth if not logged in
+  if (!authLoading && !user) {
+    return (
+      <div className="mx-auto my-16 max-w-lg rounded-sm border border-border bg-card p-8 text-center shadow-md">
+        <Shield className="mx-auto h-12 w-12 text-primary" />
+        <h2 className="mt-4 text-xl font-bold text-foreground">Sign in to Customer Portal</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You must be logged in to access customer requisitions, RFQs, and account details.
+        </p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link
+            to="/auth"
+            search={{ redirect: "/portal" }}
+            className="rounded-sm bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90"
+          >
+            Sign in to Customer Portal
+          </Link>
+          <Link
+            to="/"
+            className="rounded-sm border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Return Home
+          </Link>
+        </div>
+      </div>
+    );
   }
 
-  async function openCertificate(id: string) {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileBusy(true);
+    setProfileNotice(null);
     try {
-      const result = await downloadCertificate({ data: { documentId: id } });
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The document is temporarily unavailable.");
+      await updateProfile({
+        fullName: profileName,
+        company: profileCompany,
+        phone: profilePhone,
+      });
+      setProfileNotice("Profile updated successfully.");
+    } catch (err: any) {
+      setProfileNotice(err?.message || "Failed to update profile.");
+    } finally {
+      setProfileBusy(false);
     }
-  }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdNotice(null);
+    setPwdError(null);
+
+    if (newPassword !== confirmNewPassword) {
+      setPwdError("New passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPwdError("New password must be at least 8 characters long.");
+      return;
+    }
+
+    setPwdBusy(true);
+    try {
+      await api.auth.changePassword({
+        currentPassword,
+        newPassword,
+      });
+      setPwdNotice("Password updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (err: any) {
+      setPwdError(err?.message || "Failed to update password.");
+    } finally {
+      setPwdBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    void navigate({ to: "/" });
+  };
+
+  const getStatusBadge = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes("approved") || s.includes("fulfilled") || s.includes("resolved") || s.includes("answered")) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
+          <CheckCircle2 className="h-3 w-3" />
+          {status}
+        </span>
+      );
+    }
+    if (s.includes("review") || s.includes("pending") || s.includes("open")) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400">
+          <Clock className="h-3 w-3" />
+          {status}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-sky-400">
+        <AlertCircle className="h-3 w-3" />
+        {status}
+      </span>
+    );
+  };
 
   return (
     <>
-      <Section className="border-b border-border">
-        <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Customer dashboard" }]} />
-        <div className="mt-6">
-          <SectionHead
-            as="h1"
-            eyebrow="Customer access"
-            title="RFQs, orders and certificates"
-            intro="Review submitted enquiries, follow active orders and retrieve released documentation linked to your company."
-          />
-        </div>
-      </Section>
-      <Section>
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
-          <div>
-            <p className="eyebrow">Customer portal</p>
-            <p className="mt-2 break-all font-display text-xl font-semibold">Active enquiries &amp; orders</p>
-          </div>
-        </div>
-        <div className="mt-6 flex max-w-full gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Customer records">
-          {(
-            [
-              ["rfqs", `RFQs (${rfqs.length})`],
-              ["orders", `Orders (${orders.length})`],
-              ["certificates", `Certificates (${docs.length})`],
-              ["profile", "Company profile"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => {
-                setTab(key);
-                setNotice(null);
-              }}
-              className={`shrink-0 rounded-sm border px-4 py-2 text-sm font-semibold ${
-                tab === key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {notice ? (
-          <p className="mt-5 rounded-sm border border-primary/30 bg-primary/5 p-3 text-sm text-primary" role="status">
-            {notice}
-          </p>
-        ) : null}
+      <Breadcrumbs items={[{ label: "Customer Portal" }]} />
 
-        {tab === "rfqs" ? (
-          <div className="mt-8 space-y-5">
-            {rfqs.length ? (
-              rfqs.map((raw) => {
-                const items = Array.isArray(raw.items) ? (raw.items as RfqAcknowledgement["items"]) : [];
-                const attachments = Array.isArray(raw.attachments)
-                  ? (raw.attachments as RfqAcknowledgement["attachments"])
-                  : [];
-                const testing = Array.isArray(raw.testing)
-                  ? raw.testing.filter((item): item is string => typeof item === "string")
-                  : [];
-                const acknowledgement: RfqAcknowledgement = {
-                  reference: raw.reference ?? "RFQ",
-                  createdAt: raw.created_at,
-                  company: raw.company,
-                  contactName: raw.contact_name,
-                  email: raw.email,
-                  phone: raw.phone,
-                  country: raw.country,
-                  projectName: raw.project_name,
-                  incoterm: raw.incoterm,
-                  deliveryPort: raw.delivery_port,
-                  targetLeadTime: raw.target_lead_time,
-                  message: raw.message,
-                  certification: raw.certification,
-                  testing,
-                  items,
-                  attachments,
-                };
-                return (
-                  <article key={raw.id} className="surface-panel rounded-md p-5 sm:p-6">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="font-mono text-xs uppercase text-primary">{raw.reference ?? "Submitted RFQ"}</p>
-                        <h2 className="mt-2 text-xl font-semibold">{raw.project_name || raw.company}</h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Submitted {new Date(raw.created_at).toLocaleDateString("en-GB")} · Status: {raw.status}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void downloadRfqQuotation(acknowledgement)}
-                          className="rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
-                        >
-                          Download quotation
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void downloadRfqAcknowledgement(acknowledgement)}
-                          className="rounded-sm border border-primary/50 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
-                        >
-                          Download acknowledgement
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-5 overflow-x-auto">
-                      <table className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="text-xs text-muted-foreground">
-                          <tr>
-                            <th className="pb-2">Grade</th>
-                            <th className="pb-2">Product</th>
-                            <th className="pb-2">Size</th>
-                            <th className="pb-2">Class / schedule</th>
-                            <th className="pb-2">Facing</th>
-                            <th className="pb-2">Quantity</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {items.map((item, index) => (
-                            <tr key={`${raw.id}-${index}`}>
-                              <td className="py-3 pr-4">{item.material || "—"}</td>
-                              <td className="py-3 pr-4">{item.product || "—"}</td>
-                              <td className="py-3 pr-4">{item.size || "—"}</td>
-                              <td className="py-3 pr-4">{item.rating || "—"}</td>
-                              <td className="py-3 pr-4">{item.facing || "—"}</td>
-                              <td className="py-3">
-                                {item.quantity || "—"} {item.unit || "pcs"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <Empty
-                title="No quotation requests yet"
-                body="Submit an enquiry and it will appear here as soon as it is securely recorded."
-                action={
-                  <Link
-                    to="/rfq"
-                    className="inline-block rounded-sm bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
-                  >
-                    Request a quotation
-                  </Link>
-                }
-              />
-            )}
-          </div>
-        ) : null}
-
-        {tab === "orders" ? (
-          <div className="mt-8 space-y-6">
-            {orders.length ? (
-              orders.map((order) => {
-                const lines = data.lines.filter((line) => line.order_id === order.id);
-                return (
-                  <article key={order.id} className="surface-panel rounded-md p-5 sm:p-6">
-                    <div className="flex flex-wrap justify-between gap-4">
-                      <div>
-                        <p className="font-mono text-xs uppercase text-primary">{order.po_number}</p>
-                        <h2 className="mt-2 text-xl font-semibold">{order.project_name || "Order"}</h2>
-                      </div>
-                      <span className="rounded-sm border border-primary/40 px-3 py-1 text-xs uppercase text-primary">
-                        {order.status.replaceAll("-", " ")}
-                      </span>
-                    </div>
-                    <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
-                      {[
-                        ["Incoterm", order.incoterm || "—"],
-                        ["Destination", order.destination_port || "—"],
-                        ["ETA", order.eta || "To be confirmed"],
-                      ].map(([label, value]) => (
-                        <div key={label}>
-                          <dt className="text-muted-foreground">{label}</dt>
-                          <dd className="mt-1">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    {lines.length ? (
-                      <div className="mt-6">
-                        <SpecTable
-                          caption="Order lines and heat lineage"
-                          head={["Description", "Size", "Quantity", "Heat reference"]}
-                          rows={lines.map((line) => [
-                            line.description,
-                            line.size || "—",
-                            `${line.quantity} ${line.unit}`,
-                            line.heat_ref || "On dispatch",
-                          ])}
-                        />
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })
-            ) : (
-              <Empty
-                title="No orders linked yet"
-                body={`Purchase orders will appear here once booked. Contact ${company.exportEmail} with a PO number if you expect records here.`}
-              />
-            )}
-          </div>
-        ) : null}
-
-        {tab === "certificates" ? (
-          <div className="mt-8 divide-y divide-border border-y border-border">
-            {docs.length ? (
-              docs.map((doc) => (
-                <div key={doc.id} className="flex flex-wrap items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="font-medium">{doc.title}</p>
-                    <p className="mt-1 font-mono text-[11px] uppercase text-muted-foreground">
-                      {doc.doc_type} · {doc.reference || "No reference"} · {doc.issued_on}
+      <Section className="py-6 md:py-10">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          {/* Sidebar Navigation */}
+          <aside className="lg:col-span-3">
+            <div className="sticky top-20 rounded-sm border border-border bg-card p-4 shadow-sm">
+              {/* User Profile Mini Header */}
+              <div className="border-b border-border pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-bold text-primary">
+                    {user?.fullName?.charAt(0).toUpperCase() || "U"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {user?.fullName || "Valued Customer"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user?.company || user?.email}
                     </p>
                   </div>
-                  {doc.storage_path ? (
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="rounded-sm bg-primary/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary">
+                    {user?.role === "admin" ? "Administrator" : "Verified Client"}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    ID: #{user?.id?.slice(0, 8)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Navigation Items (8 sections) */}
+              <nav className="mt-4 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("overview")}
+                  className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "overview"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Overview</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("profile")}
+                  className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "profile"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <UserIcon className="h-4 w-4" />
+                  <span>My Profile</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("products")}
+                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "products"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Package className="h-4 w-4" />
+                    <span>My Product Requests</span>
+                  </div>
+                  {productRequests.length > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        activeTab === "products" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {productRequests.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("materials")}
+                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "materials"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Layers className="h-4 w-4" />
+                    <span>My Material Requests</span>
+                  </div>
+                  {materialRequests.length > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        activeTab === "materials" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {materialRequests.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("inquiries")}
+                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "inquiries"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <HelpCircle className="h-4 w-4" />
+                    <span>My Inquiries</span>
+                  </div>
+                  {inquiries.length > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        activeTab === "inquiries" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {inquiries.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("repeat")}
+                  className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "repeat"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <Repeat className="h-4 w-4" />
+                  <span>Repeat Requests</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("settings")}
+                  className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "settings"
+                      ? "bg-primary text-primary-foreground shadow-[var(--shadow-gold)] font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>Account Settings</span>
+                </button>
+
+                <div className="border-t border-border pt-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 rounded-sm px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </nav>
+            </div>
+          </aside>
+
+          {/* Main Dashboard Content Area */}
+          <main className="lg:col-span-9">
+            {/* 1. OVERVIEW SECTION */}
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                {/* Welcome Banner */}
+                <div className="relative overflow-hidden rounded-sm border border-border bg-gradient-to-r from-card via-card/90 to-background p-6">
+                  <div className="relative z-10">
+                    <p className="font-mono text-xs uppercase tracking-wider text-primary">
+                      Trishul Metals & Alloys Client Portal
+                    </p>
+                    <h2 className="mt-1 text-2xl font-bold text-foreground">
+                      Welcome, {user?.fullName || "Valued Client"}
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                      Manage cut-to-size piping specifications, request certified alloy quotations, track status updates, and communicate directly with our engineering desk.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(true)}
+                        className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Request Product</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowMaterialModal(true)}
+                        className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/60"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Request Material</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowInquiryModal(true)}
+                        className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/60"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                        <span>Ask Engineering</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Stat Cards */}
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-sm border border-border bg-card p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Product Requests
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {productRequests.length}
+                    </p>
+                    <p className="mt-1 text-[11px] text-primary">
+                      {productRequests.filter((r) => r.status === "Pending Review").length} pending review
+                    </p>
+                  </div>
+
+                  <div className="rounded-sm border border-border bg-card p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Material Requests
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {materialRequests.length}
+                    </p>
+                    <p className="mt-1 text-[11px] text-primary">
+                      {materialRequests.filter((r) => r.status === "Pending Review").length} pending review
+                    </p>
+                  </div>
+
+                  <div className="rounded-sm border border-border bg-card p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Active Quotes
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {(stats?.summary?.pendingReview ?? 0)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      In evaluation pipeline
+                    </p>
+                  </div>
+
+                  <div className="rounded-sm border border-border bg-card p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Support Inquiries
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {inquiries.length}
+                    </p>
+                    <p className="mt-1 text-[11px] text-emerald-400">
+                      {inquiries.filter((i) => i.status === "Open").length} open tickets
+                    </p>
+                  </div>
+                </div>
+
+                {/* Recent Activity Feed */}
+                <div className="rounded-sm border border-border bg-card p-6">
+                  <div className="flex items-center justify-between border-b border-border pb-4">
+                    <h3 className="text-sm font-semibold text-foreground">Recent Activity</h3>
                     <button
                       type="button"
-                      onClick={() => void openCertificate(doc.id)}
-                      className="rounded-sm border border-primary/50 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+                      onClick={() => void loadPortalData()}
+                      className="text-xs text-primary hover:underline"
                     >
-                      Download secure copy
+                      Refresh
                     </button>
+                  </div>
+
+                  {activity.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      No recent requests logged yet. Use the buttons above to submit your first quotation or inquiry.
+                    </div>
                   ) : (
-                    <a
-                      href={`mailto:${company.exportEmail}?subject=${encodeURIComponent(
-                        `Certified copy request — ${doc.reference || doc.title}`,
-                      )}`}
-                      className="rounded-sm border border-primary/50 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
-                    >
-                      Request certified copy
-                    </a>
+                    <div className="mt-4 divide-y divide-border">
+                      {activity.map((act) => (
+                        <div key={act.id} className="flex items-center justify-between py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-border bg-background text-primary">
+                              {act.type === "product_request" ? (
+                                <Package className="h-4 w-4" />
+                              ) : act.type === "material_request" ? (
+                                <Layers className="h-4 w-4" />
+                              ) : (
+                                <HelpCircle className="h-4 w-4" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-foreground">{act.title}</p>
+                              <p className="font-mono text-[10px] text-muted-foreground">
+                                {new Date(act.created_at).toLocaleDateString()} · {act.detail || act.type.replace("_", " ")}
+                              </p>
+                            </div>
+                          </div>
+                          <div>{getStatusBadge(act.status)}</div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              ))
-            ) : (
-              <p className="py-6 text-sm text-muted-foreground">Released certificates will appear here.</p>
+              </div>
             )}
-          </div>
-        ) : null}
 
-        {tab === "profile" ? (
-          <form onSubmit={save} className="mt-8 max-w-2xl surface-panel rounded-md p-6">
-            <p className="eyebrow">Reusable company details</p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <ProfileField label="Company" name="company" defaultValue={profile?.company || ""} required />
-              <ProfileField
-                label="Contact name"
-                name="contactName"
-                defaultValue={profile?.contact_name || ""}
-                required
-              />
-              <ProfileField label="Phone / WhatsApp" name="phone" defaultValue={profile?.phone || ""} />
-              <ProfileField label="Country" name="country" defaultValue={profile?.country || ""} />
-            </div>
-            <button
-              disabled={busy}
-              className="mt-6 rounded-sm bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-            >
-              {busy ? "Saving…" : "Save company details"}
-            </button>
-          </form>
-        ) : null}
+            {/* 2. MY PROFILE SECTION */}
+            {activeTab === "profile" && (
+              <div className="rounded-sm border border-border bg-card p-6">
+                <h3 className="text-base font-semibold text-foreground">My Profile</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Update your contact and company information for RFQ routing and certification records.
+                </p>
+
+                {profileNotice && (
+                  <div className="mt-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
+                    {profileNotice}
+                  </div>
+                )}
+
+                <form onSubmit={handleProfileSubmit} className="mt-6 max-w-lg space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Full Name *
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={profileCompany}
+                      onChange={(e) => setProfileCompany(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Registered Work Email (Permanent)
+                    </label>
+                    <input
+                      disabled
+                      type="email"
+                      value={user?.email || ""}
+                      className={`${fieldClass} opacity-60 cursor-not-allowed`}
+                    />
+                    <span className="mt-1 block text-[10px] text-muted-foreground">
+                      Email address is linked to your account identity. Contact support to change.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={profilePhone}
+                      onChange={(e) => setProfilePhone(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={profileBusy}
+                    className="rounded-sm bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
+                  >
+                    {profileBusy ? "Saving…" : "Save Profile"}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* 3. MY PRODUCT REQUESTS SECTION */}
+            {activeTab === "products" && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-card p-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">My Product Requests</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Review all requested piping components, dimensions, and manufacturing statuses.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>New Product Request</span>
+                  </button>
+                </div>
+
+                {productRequests.length === 0 ? (
+                  <div className="rounded-sm border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                    <Package className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
+                    No product requests submitted yet. Click "New Product Request" to request a cut-to-size quote.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-sm border border-border bg-card">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border bg-muted/40 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3">Material / Grade</th>
+                          <th className="p-3">Size</th>
+                          <th className="p-3">Quantity</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Date</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {productRequests.map((req) => (
+                          <tr key={req.id} className="hover:bg-muted/30">
+                            <td className="p-3 font-semibold text-foreground">{req.product_name}</td>
+                            <td className="p-3 text-muted-foreground">{req.material || "—"}</td>
+                            <td className="p-3 font-mono">{req.size || "—"}</td>
+                            <td className="p-3 font-mono font-medium">{req.quantity}</td>
+                            <td className="p-3">{getStatusBadge(req.status)}</td>
+                            <td className="p-3 font-mono text-muted-foreground">
+                              {new Date(req.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setRepeatTarget({ type: "product", item: req })}
+                                className="inline-flex items-center gap-1 rounded-sm border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:border-primary hover:text-primary"
+                              >
+                                <Repeat className="h-3 w-3" />
+                                <span>Repeat</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. MY MATERIAL REQUESTS SECTION */}
+            {activeTab === "materials" && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-card p-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">My Material Requests</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Track raw material allocations, mill test requisitions, and alloy inquiries.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMaterialModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>New Material Request</span>
+                  </button>
+                </div>
+
+                {materialRequests.length === 0 ? (
+                  <div className="rounded-sm border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                    <Layers className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
+                    No material requests logged yet. Click "New Material Request" to specify your alloy requirements.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-sm border border-border bg-card">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border bg-muted/40 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="p-3">Material Grade</th>
+                          <th className="p-3">Product Form</th>
+                          <th className="p-3">Quantity</th>
+                          <th className="p-3">Specification</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Date</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {materialRequests.map((req) => (
+                          <tr key={req.id} className="hover:bg-muted/30">
+                            <td className="p-3 font-semibold text-foreground">{req.material_name}</td>
+                            <td className="p-3 text-muted-foreground">{req.form || "Pipes / Flanges"}</td>
+                            <td className="p-3 font-mono font-medium">{req.quantity}</td>
+                            <td className="p-3 font-mono text-muted-foreground">{req.specification || "—"}</td>
+                            <td className="p-3">{getStatusBadge(req.status)}</td>
+                            <td className="p-3 font-mono text-muted-foreground">
+                              {new Date(req.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setRepeatTarget({ type: "material", item: req })}
+                                className="inline-flex items-center gap-1 rounded-sm border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:border-primary hover:text-primary"
+                              >
+                                <Repeat className="h-3 w-3" />
+                                <span>Repeat</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 5. MY INQUIRIES SECTION */}
+            {activeTab === "inquiries" && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-card p-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">My Inquiries & Support</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Direct channel to Trishul Metals metallurgical engineers and export desk.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInquiryModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>New Inquiry</span>
+                  </button>
+                </div>
+
+                {inquiries.length === 0 ? (
+                  <div className="rounded-sm border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                    <HelpCircle className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
+                    No inquiries recorded. Submit an inquiry for material test reports, dimensional tolerances, or custom fabrication.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {inquiries.map((inq) => (
+                      <div key={inq.id} className="rounded-sm border border-border bg-card p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+                          <h4 className="text-sm font-semibold text-foreground">{inq.subject}</h4>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {new Date(inq.created_at).toLocaleDateString()}
+                            </span>
+                            {getStatusBadge(inq.status)}
+                          </div>
+                        </div>
+
+                        <p className="mt-3 text-xs leading-relaxed text-foreground/90">
+                          {inq.message}
+                        </p>
+
+                        {inq.response ? (
+                          <div className="mt-4 rounded-sm border border-primary/30 bg-primary/5 p-3.5">
+                            <p className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                              Trishul Engineering Response:
+                            </p>
+                            <p className="mt-1 text-xs leading-relaxed text-foreground">
+                              {inq.response}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-3 font-mono text-[11px] text-muted-foreground">
+                            Status: Awaiting review by metallurgist.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 6. REPEAT REQUESTS SECTION */}
+            {activeTab === "repeat" && (
+              <div className="space-y-4">
+                <div className="rounded-sm border border-border bg-card p-4">
+                  <h3 className="text-base font-semibold text-foreground">Rapid Repeat Requests</h3>
+                  <p className="text-xs text-muted-foreground">
+                    One-click duplicate orders from your historical requisitions with customized quantities.
+                  </p>
+                </div>
+
+                {productRequests.length === 0 && materialRequests.length === 0 ? (
+                  <div className="rounded-sm border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                    <Repeat className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
+                    No previous orders available to repeat yet. Submit your first product or material request to enable rapid repeat.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {productRequests.map((req) => (
+                      <div key={req.id} className="flex flex-col justify-between rounded-sm border border-border bg-card p-4">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                              Product Order
+                            </span>
+                            {getStatusBadge(req.status)}
+                          </div>
+                          <h4 className="mt-2 text-sm font-semibold text-foreground">{req.product_name}</h4>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Grade: {req.material || "Standard"} · Size: {req.size || "Standard"}
+                          </p>
+                          <p className="font-mono text-xs text-foreground mt-2">
+                            Previous Qty: {req.quantity}
+                          </p>
+                        </div>
+                        <div className="mt-4 border-t border-border pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setRepeatTarget({ type: "product", item: req })}
+                            className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                          >
+                            <Repeat className="h-3.5 w-3.5" />
+                            <span>Repeat This Order</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {materialRequests.map((req) => (
+                      <div key={req.id} className="flex flex-col justify-between rounded-sm border border-border bg-card p-4">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                              Material Allocation
+                            </span>
+                            {getStatusBadge(req.status)}
+                          </div>
+                          <h4 className="mt-2 text-sm font-semibold text-foreground">{req.material_name}</h4>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Form: {req.form || "Pipes / Flanges"} · Spec: {req.specification || "Standard"}
+                          </p>
+                          <p className="font-mono text-xs text-foreground mt-2">
+                            Previous Qty: {req.quantity}
+                          </p>
+                        </div>
+                        <div className="mt-4 border-t border-border pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setRepeatTarget({ type: "material", item: req })}
+                            className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90"
+                          >
+                            <Repeat className="h-3.5 w-3.5" />
+                            <span>Repeat This Order</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 7. ACCOUNT SETTINGS SECTION */}
+            {activeTab === "settings" && (
+              <div className="rounded-sm border border-border bg-card p-6">
+                <h3 className="text-base font-semibold text-foreground">Account Security & Settings</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Update your authentication credentials and manage session security.
+                </p>
+
+                {pwdNotice && (
+                  <div className="mt-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
+                    {pwdNotice}
+                  </div>
+                )}
+                {pwdError && (
+                  <div className="mt-4 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                    {pwdError}
+                  </div>
+                )}
+
+                <form onSubmit={handlePasswordSubmit} className="mt-6 max-w-lg space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter your existing password"
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      New Password (min 8 characters) *
+                    </label>
+                    <input
+                      required
+                      minLength={8}
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter your new password"
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Confirm New Password *
+                    </label>
+                    <input
+                      required
+                      minLength={8}
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Repeat your new password"
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={pwdBusy}
+                    className="rounded-sm bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
+                  >
+                    {pwdBusy ? "Updating Password…" : "Update Password"}
+                  </button>
+                </form>
+
+                <div className="mt-8 border-t border-border pt-6">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Security Session
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Signed in as <span className="font-semibold text-foreground">{user?.email}</span> via encrypted session stored in SQLite database.
+                  </p>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
       </Section>
+
+      {/* MODAL: New Product Request */}
+      {showProductModal && (
+        <NewProductModal
+          onClose={() => setShowProductModal(false)}
+          onSuccess={() => {
+            setShowProductModal(false);
+            void loadPortalData();
+            setActiveTab("products");
+          }}
+        />
+      )}
+
+      {/* MODAL: New Material Request */}
+      {showMaterialModal && (
+        <NewMaterialModal
+          onClose={() => setShowMaterialModal(false)}
+          onSuccess={() => {
+            setShowMaterialModal(false);
+            void loadPortalData();
+            setActiveTab("materials");
+          }}
+        />
+      )}
+
+      {/* MODAL: New Inquiry */}
+      {showInquiryModal && (
+        <NewInquiryModal
+          onClose={() => setShowInquiryModal(false)}
+          onSuccess={() => {
+            setShowInquiryModal(false);
+            void loadPortalData();
+            setActiveTab("inquiries");
+          }}
+        />
+      )}
+
+      {/* MODAL: Repeat Request */}
+      {repeatTarget && (
+        <RepeatOrderModal
+          target={repeatTarget}
+          onClose={() => setRepeatTarget(null)}
+          onSuccess={() => {
+            setRepeatTarget(null);
+            void loadPortalData();
+            if (repeatTarget.type === "product") setActiveTab("products");
+            else setActiveTab("materials");
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ProfileField({
-  label,
-  name,
-  defaultValue,
-  required = false,
-}: {
-  label: string;
-  name: string;
-  defaultValue: string;
-  required?: boolean;
-}) {
+// ----------------------------------------------------------------------
+// SUB-MODALS
+// ----------------------------------------------------------------------
+
+function NewProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [productName, setProductName] = useState("");
+  const [material, setMaterial] = useState("");
+  const [size, setSize] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [specification, setSpecification] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productName || !quantity) {
+      setError("Product Name and Quantity are required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.customer.createProductRequest({
+        productName,
+        material,
+        size,
+        quantity,
+        specification,
+        notes,
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <label className="block">
-      <span className="eyebrow">
-        {label}
-        {required ? " *" : ""}
-      </span>
-      <input
-        name={name}
-        defaultValue={defaultValue}
-        required={required}
-        className="motion-field mt-2 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
-      />
-    </label>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-sm border border-border bg-card p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-foreground">New Product Request</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Submit specifications for flanges, buttweld fittings, or forged piping components.
+        </p>
+
+        {error && (
+          <div className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Product Name / Description *
+            </label>
+            <input
+              required
+              type="text"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              placeholder="e.g. Weld Neck Flange ASME B16.5"
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Material / Grade
+              </label>
+              <input
+                type="text"
+                value={material}
+                onChange={(e) => setMaterial(e.target.value)}
+                placeholder="e.g. Inconel 625 / SS 316L"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Nominal Size / Class
+              </label>
+              <input
+                type="text"
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                placeholder='e.g. 4" Class 300'
+                className={fieldClass}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Quantity *
+              </label>
+              <input
+                required
+                type="text"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="e.g. 50 pcs"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Specification / Standard
+              </label>
+              <input
+                type="text"
+                value={specification}
+                onChange={(e) => setSpecification(e.target.value)}
+                placeholder="e.g. ASTM B564 / NORSOM M-630"
+                className={fieldClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Additional Notes / Machining Requirements
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Custom bevel angle, facing finish, EN 10204 3.1 requirement..."
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Submitting…" : "Submit Request"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
-function Empty({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
+function NewMaterialModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [materialName, setMaterialName] = useState("");
+  const [form, setForm] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [specification, setSpecification] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialName || !quantity) {
+      setError("Material Grade and Quantity are required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.customer.createMaterialRequest({
+        materialName,
+        form,
+        quantity,
+        specification,
+        notes,
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit material request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="surface-panel rounded-md p-6">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-sm border border-border bg-card p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-foreground">New Material Specification Request</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Request alloy availability, mill certification, or specialized CRA grades.
+        </p>
+
+        {error && (
+          <div className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Material Grade / Alloy *
+            </label>
+            <input
+              required
+              type="text"
+              value={materialName}
+              onChange={(e) => setMaterialName(e.target.value)}
+              placeholder="e.g. Duplex 2205 / UNS S31803 / Hastelloy C276"
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Product Form
+              </label>
+              <input
+                type="text"
+                value={form}
+                onChange={(e) => setForm(e.target.value)}
+                placeholder="e.g. Seamless Pipe / Plate / Round Bar"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Quantity *
+              </label>
+              <input
+                required
+                type="text"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="e.g. 2,500 kg / 120 meters"
+                className={fieldClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Technical Specification / Heat Treatment
+            </label>
+            <input
+              type="text"
+              value={specification}
+              onChange={(e) => setSpecification(e.target.value)}
+              placeholder="e.g. ASTM A790, Solution Annealed, PREN >= 35"
+              className={fieldClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Testing & Notes
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Corrosion test (ASTM G48), Charpy Impact at -46°C, EN 10204 3.1..."
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Submitting…" : "Submit Material Request"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function NewInquiryModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subject || !message) {
+      setError("Subject and Message are required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.customer.createInquiry({ subject, message });
+      onSuccess();
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit inquiry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-foreground">Submit Technical Inquiry</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Our engineering and metallurgical support team will respond directly to your dashboard.
+        </p>
+
+        {error && (
+          <div className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Subject *
+            </label>
+            <input
+              required
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="e.g. MTC verification for Heat H-6251A"
+              className={fieldClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Detailed Query / Request *
+            </label>
+            <textarea
+              required
+              rows={4}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Describe your inquiry, project parameters, or questions..."
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Submitting…" : "Send Inquiry"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RepeatOrderModal({
+  target,
+  onClose,
+  onSuccess,
+}: {
+  target: { type: "product" | "material"; item: ProductRequestItem | MaterialRequestItem };
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [quantity, setQuantity] = useState(target.item.quantity);
+  const [notes, setNotes] = useState(target.item.notes || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const itemName =
+    target.type === "product"
+      ? (target.item as ProductRequestItem).product_name
+      : (target.item as MaterialRequestItem).material_name;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      if (target.type === "product") {
+        await api.customer.repeatProductRequest(target.item.id, { quantity, notes });
+      } else {
+        await api.customer.repeatMaterialRequest(target.item.id, { quantity, notes });
+      }
+      onSuccess();
+    } catch (err: any) {
+      setError(err?.message || "Failed to create repeat request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-foreground">Repeat Request</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Duplicate previous request for <span className="font-semibold text-foreground">{itemName}</span> with updated quantities.
+        </p>
+
+        {error && (
+          <div className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Quantity for Repeat Order *
+            </label>
+            <input
+              required
+              type="text"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className={fieldClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Special Instructions / Notes
+            </label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Submitting…" : "Confirm Repeat Request"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

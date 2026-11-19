@@ -20,7 +20,7 @@ import { CompareTray } from "@/components/site/ShortlistControls";
 import { AskTrishul } from "@/components/site/AskTrishul";
 import { FloatingContactButtons } from "@/components/site/FloatingContactButtons";
 import { RouteHero } from "@/components/site/RouteHero";
-import { supabase } from "@/integrations/supabase/client";
+import { AuthProvider } from "@/hooks/useAuth";
 
 
 function NotFoundComponent() {
@@ -237,34 +237,25 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const router = useRouter();
-
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      void router.invalidate();
-      if (session) void queryClient.invalidateQueries();
-      else queryClient.clear();
-    });
-    return () => data.subscription.unsubscribe();
-  }, [queryClient, router]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ShortlistProvider>
-        <div className="flex min-h-screen flex-col">
-          <Header />
-          <main className="flex-1">
-            <RouteHero />
-            {/* Required: nested routes render here. */}
-            <Outlet />
-          </main>
-          <Footer />
-          <CompareTray />
-          <FloatingContactButtons />
-          <AskTrishul />
-        </div>
-      </ShortlistProvider>
+      <AuthProvider>
+        <ShortlistProvider>
+          <div className="flex min-h-screen flex-col">
+            <Header />
+            <main className="flex-1">
+              <RouteHero />
+              {/* Required: nested routes render here. */}
+              <Outlet />
+            </main>
+            <Footer />
+            <CompareTray />
+            <FloatingContactButtons />
+            <AskTrishul />
+          </div>
+        </ShortlistProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

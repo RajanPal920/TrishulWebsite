@@ -67,24 +67,22 @@ export async function handleDocumentDownload(input: DocumentDownloadInput) {
   const doc = DOCUMENT_REGISTRY[input.documentKey];
   if (!doc) throw new Error("Unknown document requested.");
 
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { run } = await import("../../server/db/connection.js");
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
 
-  const { error: insertError } = await supabaseAdmin.from("document_downloads").insert({
-    document_key: doc.key,
-    document_title: doc.title,
-    name: input.name || null,
-    company: input.company || null,
-    email: input.email,
-    phone: input.phone,
-    user_agent: input.userAgent || null,
-    referrer: input.referrer || null,
-  });
-  if (insertError) throw new Error("Could not process your download. Please email us directly.");
+  try {
+    await run(
+      `INSERT INTO document_downloads (id, doc_id, email, name, company, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, doc.key, input.email, input.name || null, input.company || null, now]
+    );
+  } catch (dbErr) {
+    console.warn("[Document Download DB Warning]:", dbErr);
+  }
 
-  const { data, error } = await supabaseAdmin.storage
-    .from("documents")
-    .createSignedUrl(doc.bucketPath, 120);
-  if (error || !data?.signedUrl) throw new Error("Document is temporarily unavailable.");
+  // Provide direct document link
+  const signedUrl = `/${doc.bucketPath}`;
 
   let emailSent = false;
   let emailNote = "";
@@ -121,5 +119,5 @@ export async function handleDocumentDownload(input: DocumentDownloadInput) {
     console.warn("[document-download] notification email skipped:", emailNote);
   }
 
-  return { ok: true as const, signedUrl: data.signedUrl, fileName: `${doc.key}.pdf`, title: doc.title, emailSent, emailNote };
+  return { ok: true as const, signedUrl, fileName: `${doc.key}.pdf`, title: doc.title, emailSent, emailNote };
 }

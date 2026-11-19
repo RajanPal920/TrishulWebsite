@@ -82,7 +82,6 @@ const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export async function persistRfq(input: RfqInput): Promise<{ reference: string; confirmationToken: string }> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const reference = makeReference();
   const confirmationToken = crypto.randomUUID();
 
@@ -91,35 +90,46 @@ export async function persistRfq(input: RfqInput): Promise<{ reference: string; 
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED.includes(ext)) continue;
     const path = `${reference}/${file.name.replace(/[^\w.\-]+/g, "_")}`;
-    const { error } = await supabaseAdmin.storage
-      .from("rfq-uploads")
-      .upload(path, base64ToBytes(file.data), {
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
-      });
-    if (!error) stored.push({ name: file.name, path, size: file.size });
+    stored.push({ name: file.name, path, size: file.size });
   }
 
-  const { error } = await supabaseAdmin.from("rfq_requests").insert({
-    reference,
-    confirmation_token: confirmationToken,
-    company: input.company,
-    contact_name: input.contactName,
-    email: input.email,
-    phone: input.phone || null,
-    country: input.country || null,
-    incoterm: input.incoterm || null,
-    delivery_port: input.deliveryPort || null,
-    target_lead_time: input.targetLeadTime || null,
-    project_name: input.projectName || null,
-    message: input.message || null,
-    certification: input.certification || null,
-    testing: input.testing,
-    items: input.items,
-    attachments: stored,
-  });
+  const { run } = await import("../../server/db/connection.js");
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
 
-  if (error) throw new Error("Could not save your enquiry. Please email us directly.");
+  try {
+    await run(
+      `INSERT INTO rfq_requests (
+        id, reference, confirmation_token, company, contact_name,
+        email, phone, country, incoterm, delivery_port, target_lead_time,
+        project_name, message, certification, testing, items, attachments,
+        status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?)`,
+      [
+        id,
+        reference,
+        confirmationToken,
+        input.company,
+        input.contactName,
+        input.email,
+        input.phone || null,
+        input.country || null,
+        input.incoterm || null,
+        input.deliveryPort || null,
+        input.targetLeadTime || null,
+        input.projectName || null,
+        input.message || null,
+        input.certification || null,
+        JSON.stringify(input.testing || []),
+        JSON.stringify(input.items || []),
+        JSON.stringify(stored),
+        now,
+      ]
+    );
+  } catch (dbErr) {
+    console.error("[RFQ Save Error]:", dbErr);
+    throw new Error("Could not save your enquiry. Please email us directly.");
+  }
 
   try {
     const apiKey = process.env["LOVABLE_API_KEY"];

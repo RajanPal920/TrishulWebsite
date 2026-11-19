@@ -1,7 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { Tables } from "@/integrations/supabase/types";
 
 export interface PortalProfile {
   company: string;
@@ -11,41 +9,93 @@ export interface PortalProfile {
   email?: string;
 }
 
+export interface ClientOrder {
+  id: string;
+  order_number: string;
+  status: string;
+  total_amount?: number;
+  currency?: string;
+  created_at: string;
+}
+
+export interface ClientDocument {
+  id: string;
+  title: string;
+  document_type: string;
+  storage_path: string;
+  issued_on: string;
+}
+
+export interface RfqRequestRecord {
+  id: string;
+  reference: string;
+  company: string;
+  contact_name: string;
+  email: string;
+  phone?: string | null;
+  country?: string | null;
+  incoterm?: string | null;
+  delivery_port?: string | null;
+  target_lead_time?: string | null;
+  project_name?: string | null;
+  message?: string | null;
+  items: any;
+  attachments: any;
+  testing?: any;
+  certification?: string | null;
+  status: string;
+  created_at: string;
+  confirmation_token: string;
+}
+
 export interface PortalData {
   email: string;
   profile: PortalProfile | null;
-  orders: Tables<"client_orders">[];
-  lines: Tables<"client_order_lines">[];
-  documents: Tables<"client_documents">[];
-  rfqs: Tables<"rfq_requests">[];
+  orders: ClientOrder[];
+  lines: any[];
+  documents: ClientDocument[];
+  rfqs: RfqRequestRecord[];
 }
 
 export const getPortalData = createServerFn({ method: "GET" }).handler(async (): Promise<PortalData> => {
-  const [orders, lines, docs, rfqs] = await Promise.all([
-    supabaseAdmin.from("client_orders").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("client_order_lines").select("*"),
-    supabaseAdmin.from("client_documents").select("*").order("issued_on", { ascending: false }),
-    supabaseAdmin
-      .from("rfq_requests")
-      .select(
-        "id, reference, company, contact_name, email, phone, country, incoterm, delivery_port, target_lead_time, project_name, message, items, attachments, testing, certification, status, created_at, confirmation_token, owner_id",
-      )
-      .order("created_at", { ascending: false }),
-  ]);
+  try {
+    const { all } = await import("../../server/db/connection.js");
+    const rfqs = await all(
+      `SELECT id, reference, company, contact_name, email, phone, country, incoterm, delivery_port,
+              target_lead_time, project_name, message, items, attachments, testing, certification,
+              status, created_at, confirmation_token
+       FROM rfq_requests
+       ORDER BY created_at DESC`
+    );
 
-  return {
-    email: "portal@trishulmetal.com",
-    profile: {
-      company: "Trishul Metals & Alloys Client",
-      contact_name: "Customer",
-      phone: "",
-      country: "",
-    },
-    orders: orders.data ?? [],
-    lines: lines.data ?? [],
-    documents: docs.data ?? [],
-    rfqs: (rfqs.data ?? []) as Tables<"rfq_requests">[],
-  };
+    return {
+      email: "portal@trishulmetal.com",
+      profile: {
+        company: "Trishul Metals & Alloys Client",
+        contact_name: "Customer",
+        phone: "",
+        country: "India",
+      },
+      orders: [],
+      lines: [],
+      documents: [],
+      rfqs: (rfqs ?? []).map((r: any) => ({
+        ...r,
+        items: typeof r.items === "string" ? JSON.parse(r.items) : (r.items || []),
+        attachments: typeof r.attachments === "string" ? JSON.parse(r.attachments) : (r.attachments || []),
+      })),
+    };
+  } catch (err) {
+    console.warn("[Portal Data Fetch Warning]:", err);
+    return {
+      email: "portal@trishulmetal.com",
+      profile: null,
+      orders: [],
+      lines: [],
+      documents: [],
+      rfqs: [],
+    };
+  }
 });
 
 const profileSchema = z.object({
@@ -62,21 +112,7 @@ export const updateMyProfile = createServerFn({ method: "POST" })
   });
 
 export const getCertificateDownload = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ documentId: z.string().uuid() }).parse(input))
+  .validator((input: unknown) => z.object({ documentId: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const { data: document, error } = await supabaseAdmin
-      .from("client_documents")
-      .select("title, storage_path")
-      .eq("id", data.documentId)
-      .single();
-
-    if (error || !document?.storage_path) {
-      throw new Error("A downloadable copy is not available yet.");
-    }
-
-    const signed = await supabaseAdmin.storage.from("documents").createSignedUrl(document.storage_path, 120);
-    if (signed.error || !signed.data?.signedUrl) {
-      throw new Error("The document is temporarily unavailable.");
-    }
-    return { url: signed.data.signedUrl, title: document.title };
+    return { url: `/documents/${data.documentId}.pdf`, title: "Inspection Certificate" };
   });

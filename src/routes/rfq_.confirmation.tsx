@@ -55,7 +55,7 @@ function ConfirmationPage() {
     targetLeadTime: raw.target_lead_time,
     message: raw.message,
     certification: raw.certification,
-    testing: Array.isArray(raw.testing) ? raw.testing.filter((value): value is string => typeof value === "string") : [],
+    testing: Array.isArray(raw.testing) ? raw.testing.filter((value: unknown): value is string => typeof value === "string") : [],
     items: Array.isArray(raw.items) ? raw.items as RfqAcknowledgement["items"] : [],
     attachments: Array.isArray(raw.attachments) ? raw.attachments as RfqAcknowledgement["attachments"] : [],
   };
