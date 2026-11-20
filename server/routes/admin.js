@@ -526,6 +526,59 @@ router.put('/customers/:id', async (req, res) => {
 });
 
 /**
+ * DELETE /api/admin/customers/:id
+ * Delete a customer account (only role = 'customer', never delete admin)
+ */
+router.delete('/customers/:id', async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    // Strictly verify target is a customer (cannot delete admin)
+    const customer = await get(
+      "SELECT id, email, full_name, role FROM users WHERE id = ? AND role = 'customer'",
+      [customerId]
+    );
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer account not found or cannot be deleted.' });
+    }
+
+    // Safely delete customer associated records across related tables
+    try {
+      await run('DELETE FROM product_requests WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM material_requests WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM inquiries WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM orders WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM rfq_requests WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM user_sessions WHERE user_id = ?', [customer.id]);
+      await run('DELETE FROM user_login_activity WHERE user_id = ?', [customer.id]);
+    } catch (cleanupErr) {
+      console.warn('[Admin Delete Customer Cleanup Warning]:', cleanupErr.message);
+    }
+
+    // Delete the customer record itself
+    await run("DELETE FROM users WHERE id = ? AND role = 'customer'", [customer.id]);
+
+    await logAdminAction(
+      req.user,
+      'DELETE_CUSTOMER',
+      'users',
+      customer.id,
+      `Deleted customer account ${customer.email} (${customer.full_name})`,
+      req
+    );
+
+    return res.json({
+      success: true,
+      message: `Customer account ${customer.email} deleted successfully.`,
+      deletedId: customer.id,
+    });
+  } catch (err) {
+    console.error('[Admin Delete Customer Error]:', err);
+    return res.status(500).json({ error: 'Failed to delete customer account.' });
+  }
+});
+
+/**
  * GET /api/admin/login-activity
  * Login history audit log across all customers and administrators
  */

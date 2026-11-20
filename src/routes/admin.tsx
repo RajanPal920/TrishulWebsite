@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type AdminCustomerItem, type RfqInquiryItem } from "@/lib/api";
+import { BrandLogo } from "@/components/site/BrandLogo";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -131,6 +132,7 @@ function AdminConsolePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("all");
   const [customerMethodFilter, setCustomerMethodFilter] = useState("all");
+  const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null);
 
   // Customer Details modal
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerItem | null>(null);
@@ -232,6 +234,36 @@ function AdminConsolePage() {
       alert(err?.message || "Failed to delete inquiry.");
     } finally {
       setDeletingRfqId(null);
+    }
+  };
+
+  const handleDeleteCustomer = async (customerId: string, customerEmail?: string, customerName?: string) => {
+    const label = customerName ? `${customerName} (${customerEmail || ""})` : (customerEmail || "this customer");
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete customer "${label}"?\n\nThis will permanently delete the customer account and related inquiry history. This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingCustomerId(customerId);
+    try {
+      await api.admin.deleteCustomer(customerId);
+      setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+      if (selectedCustomer && selectedCustomer.id === customerId) {
+        setSelectedCustomer(null);
+      }
+      if (editingCustomer && editingCustomer.id === customerId) {
+        setEditingCustomer(null);
+      }
+      setOverviewStats((prev) => ({
+        ...prev,
+        totalCustomers: Math.max(0, prev.totalCustomers - 1),
+      }));
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete customer account.");
+    } finally {
+      setDeletingCustomerId(null);
     }
   };
 
@@ -398,8 +430,8 @@ function AdminConsolePage() {
     return (
       <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
         <div className="w-full max-w-md rounded-md border border-border bg-card/90 p-8 shadow-2xl backdrop-blur">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-            <Shield className="h-7 w-7" />
+          <div className="mx-auto mb-5 flex items-center justify-center">
+            <BrandLogo priority className="h-12 w-auto max-w-[220px] object-contain drop-shadow-sm" />
           </div>
 
           <div className="text-center">
@@ -478,19 +510,15 @@ function AdminConsolePage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:px-8">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded border border-primary/40 bg-primary/10 text-primary">
-              <Shield className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="font-serif text-sm font-bold tracking-wide text-foreground">
-                TRISHUL METALS & ALLOYS
-              </span>
-              <span className="ml-2 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-primary">
-                Owner Console
-              </span>
-            </div>
-          </div>
+          <Link to="/" className="flex items-center gap-3 group" title="Return to Trishul Metals Home">
+            <BrandLogo
+              priority
+              className="h-10 w-auto max-w-[190px] object-contain drop-shadow-sm transition-opacity group-hover:opacity-90"
+            />
+            <span className="rounded bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30">
+              Owner Console
+            </span>
+          </Link>
           <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-mono text-emerald-400 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             MySQL: trishul_db
@@ -1032,7 +1060,7 @@ function AdminConsolePage() {
                               <button
                                 type="button"
                                 onClick={() => openCustomerDetails(cust)}
-                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
                                 title="View customer profile & full inquiry history"
                               >
                                 History
@@ -1040,10 +1068,19 @@ function AdminConsolePage() {
                               <button
                                 type="button"
                                 onClick={() => openEditCustomer(cust)}
-                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
                                 title="Edit contact info & account status"
                               >
                                 <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingCustomerId === cust.id}
+                                onClick={() => handleDeleteCustomer(cust.id, cust.email, cust.full_name)}
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-400 disabled:opacity-40 transition-colors"
+                                title="Delete customer account"
+                              >
+                                <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
                           </td>
@@ -1475,7 +1512,17 @@ function AdminConsolePage() {
               )}
             </div>
 
-            <div className="mt-6 flex justify-end border-t border-border pt-4">
+            <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => handleDeleteCustomer(selectedCustomer.id, selectedCustomer.email, selectedCustomer.full_name)}
+                disabled={deletingCustomerId === selectedCustomer.id}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                title="Permanently delete this customer account"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Customer
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedCustomer(null)}
@@ -1571,21 +1618,33 @@ function AdminConsolePage() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-border">
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setEditingCustomer(null)}
-                  className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-muted"
+                  onClick={() => handleDeleteCustomer(editingCustomer.id, editingCustomer.email, editingCustomer.full_name)}
+                  disabled={deletingCustomerId === editingCustomer.id}
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                  title="Permanently delete this customer account"
                 >
-                  Cancel
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete Customer
                 </button>
-                <button
-                  type="submit"
-                  disabled={editBusy}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {editBusy ? "Saving…" : "Save Contact Info"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCustomer(null)}
+                    className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editBusy}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {editBusy ? "Saving…" : "Save Contact Info"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

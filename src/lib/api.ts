@@ -449,6 +449,12 @@ export const api = {
       });
     },
 
+    async deleteCustomer(id: string): Promise<{ success: boolean; message: string; deletedId?: string }> {
+      return request(`/api/admin/customers/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
     async getLoginActivity(): Promise<{ loginActivity: any[] }> {
       return request('/api/admin/login-activity');
     },

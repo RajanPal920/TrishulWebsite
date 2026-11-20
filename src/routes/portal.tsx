@@ -217,8 +217,8 @@ function CustomerPortalPage() {
     try {
       await updateProfile({
         fullName: profileName.trim(),
-        company: profileCompany.trim() || null,
-        phone: profilePhone.trim() || null,
+        ...(profileCompany.trim() ? { company: profileCompany.trim() } : {}),
+        ...(profilePhone.trim() ? { phone: profilePhone.trim() } : {}),
       });
       setProfileMessage("Your profile information was updated successfully.");
       setTimeout(() => setProfileMessage(null), 5000);
@@ -293,7 +293,7 @@ function CustomerPortalPage() {
     );
   }
 
-  const displayName = user.fullName || user.full_name || user.email.split("@")[0];
+  const displayName = user.fullName || user.full_name || (user.email ? user.email.split("@")[0] : "Customer") || "Customer";
 
   return (
     <div className="min-h-screen pb-20">
