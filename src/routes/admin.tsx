@@ -512,14 +512,14 @@ function AdminConsolePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:px-8">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-3 shrink-0 group" title="Return to Trishul Metals Home">
-            <div className="flex h-10 max-h-10 items-center overflow-hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-3 sm:px-6 md:px-8 backdrop-blur">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 shrink-0 group" title="Return to Trishul Metals Home">
+            <div className="flex h-9 max-h-9 items-center overflow-hidden shrink-0">
               <BrandLogo
                 priority
-                className="h-8 md:h-9 max-h-9 w-auto max-w-[170px] object-contain drop-shadow-sm transition-opacity group-hover:opacity-90"
-                style={{ maxHeight: "36px", height: "36px", width: "auto" }}
+                className="h-8 sm:h-9 max-h-9 w-auto max-w-[150px] sm:max-w-[175px] object-contain drop-shadow-sm select-none transition-opacity group-hover:opacity-90 block"
+                style={{ maxHeight: "36px", height: "36px", width: "auto", display: "block" }}
               />
             </div>
             <span className="shrink-0 rounded bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30">
@@ -532,7 +532,7 @@ function AdminConsolePage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
             to="/portal"
             className="hidden items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:border-primary sm:flex"
@@ -543,18 +543,80 @@ function AdminConsolePage() {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-red-500/50 hover:text-red-400"
+            className="flex items-center gap-1.5 rounded-sm border border-border px-2.5 sm:px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-red-500/50 hover:text-red-400"
           >
             <LogOut className="h-3.5 w-3.5" />
-            Sign Out
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </header>
 
-      {/* Main Layout: Sidebar & Content */}
-      <div className="flex min-h-[calc(100vh-4rem)]">
-        {/* Simple Sidebar Navigation */}
-        <aside className="w-56 shrink-0 border-r border-border bg-card/40 p-4">
+      {/* Main Layout: Responsive Sidebar & Content */}
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col md:flex-row">
+        {/* Mobile Navigation Tab Bar */}
+        <div className="flex md:hidden overflow-x-auto border-b border-border bg-card/60 px-3 py-2 gap-2 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setActiveTab("overview")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === "overview"
+                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("rfqs")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === "rfqs"
+                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Queries / RFQs
+            {overviewStats.totalRfqs > 0 ? (
+              <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.2 text-[10px] font-bold text-primary">
+                {overviewStats.totalRfqs}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("customers")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === "customers"
+                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Customers
+            {overviewStats.totalCustomers > 0 ? (
+              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.2 text-[10px] font-bold text-foreground">
+                {overviewStats.totalCustomers}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("settings")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === "settings"
+                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            Settings
+          </button>
+        </div>
+
+        {/* Desktop Sidebar Navigation */}
+        <aside className="hidden md:block w-56 shrink-0 border-r border-border bg-card/40 p-4">
           <nav className="space-y-1">
             <button
               type="button"
@@ -637,7 +699,7 @@ function AdminConsolePage() {
         </aside>
 
         {/* Dynamic Body Content */}
-        <main className="flex-1 p-6 md:p-8">
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           {/* ======================================================== */}
           {/* 1. OVERVIEW SECTION                                      */}
           {/* ======================================================== */}
@@ -988,7 +1050,7 @@ function AdminConsolePage() {
                         <th className="px-4 py-3">Registered (IST)</th>
                         <th className="px-4 py-3">Last Login (IST)</th>
                         <th className="px-4 py-3 text-center">Total Queries</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
+                        <th className="sticky right-0 z-10 bg-card border-l border-border/80 px-4 py-3 text-right shadow-[-4px_0_8px_rgba(0,0,0,0.35)]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -1061,13 +1123,13 @@ function AdminConsolePage() {
                             </span>
                           </td>
 
-                          {/* Actions */}
-                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                          {/* Actions - Sticky right for guaranteed visibility */}
+                          <td className="sticky right-0 z-10 bg-card border-l border-border/80 whitespace-nowrap px-4 py-3 text-right shadow-[-4px_0_8px_rgba(0,0,0,0.35)]">
                             <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => openCustomerDetails(cust)}
-                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
+                                className="rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
                                 title="View customer profile & full inquiry history"
                               >
                                 History
@@ -1075,7 +1137,7 @@ function AdminConsolePage() {
                               <button
                                 type="button"
                                 onClick={() => openEditCustomer(cust)}
-                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
+                                className="rounded border border-border bg-background p-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
                                 title="Edit contact info & account status"
                               >
                                 <Edit2 className="h-3 w-3" />
@@ -1084,10 +1146,11 @@ function AdminConsolePage() {
                                 type="button"
                                 disabled={deletingCustomerId === cust.id}
                                 onClick={() => handleDeleteCustomer(cust.id, cust.email, cust.full_name)}
-                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-400 disabled:opacity-40 transition-colors"
-                                title="Delete customer account"
+                                className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                                title="Permanently delete this customer account"
                               >
                                 <Trash2 className="h-3 w-3" />
+                                <span>Delete</span>
                               </button>
                             </div>
                           </td>

@@ -14,6 +14,8 @@ import {
   MapPin,
   Mail,
   Phone,
+  Eye,
+  ExternalLink,
 } from "lucide-react";
 
 export const Route = createFileRoute("/vendor-registration")({
@@ -342,14 +344,26 @@ Export Contact: export@trishulmetal.com / +91 79772 81567`;
                 <p className="mt-1 text-[11px] text-muted-foreground">{doc.desc}</p>
               </div>
 
-              <a
-                href={doc.href}
-                download
-                className="mt-4 flex items-center justify-center gap-1.5 rounded border border-border bg-background py-2 text-[11px] font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>Download PDF</span>
-              </a>
+              <div className="mt-4 flex items-center gap-2 pt-2 border-t border-border/40">
+                <a
+                  href={doc.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded bg-primary py-2 text-[11px] font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-opacity"
+                  title={`Open and view ${doc.title} in new tab`}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Open PDF</span>
+                </a>
+                <a
+                  href={doc.href}
+                  download
+                  className="flex items-center justify-center rounded border border-border bg-background p-2 text-foreground hover:border-primary hover:text-primary transition-colors"
+                  title={`Download copy of ${doc.title}`}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </div>
           ))}
         </div>

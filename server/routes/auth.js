@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
-import { get, run } from '../db/connection.js';
+import { get, run, sqliteDb } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -65,20 +65,30 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existing = await get('SELECT id FROM users WHERE email = ?', [cleanEmail]);
+    const existing = await get('SELECT id FROM users WHERE LOWER(email) = ?', [cleanEmail]);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password.trim(), 10);
     const userId = crypto.randomUUID();
     const now = new Date().toISOString();
 
     await run(
-      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, ?)`,
+      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, login_method, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'customer', 'active', 'password', ?, ?)`,
       [userId, cleanEmail, passwordHash, name, cleanCompany || null, cleanPhone || null, now, now]
     );
+
+    // Also mirror into sqlite if sqliteDb exists
+    if (sqliteDb) {
+      sqliteDb.run(
+        `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, company, phone, role, status, login_method, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'customer', 'active', 'password', ?, ?)`,
+        [userId, cleanEmail, passwordHash, name, cleanCompany || null, cleanPhone || null, now, now],
+        () => {}
+      );
+    }
 
     const token = await createSession(userId, res);
 
@@ -127,23 +137,59 @@ router.post('/login', async (req, res) => {
     const cleanEmail = rawEmail === 'admin' ? 'admin@trishulmetal.com' : rawEmail;
 
     let user = await get(
-      `SELECT id, email, password_hash, full_name, company, phone, role, avatar_url, created_at
-       FROM users WHERE email = ?`,
-      [cleanEmail]
+      `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
+       FROM users WHERE LOWER(email) = ? OR LOWER(full_name) = ?`,
+      [cleanEmail, cleanEmail]
     );
 
     if (!user && rawEmail === 'admin') {
       user = await get(
-        `SELECT id, email, password_hash, full_name, company, phone, role, avatar_url, created_at
+        `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
          FROM users WHERE role = 'admin' LIMIT 1`
       );
+    }
+
+    // Fallback: If not found in primary engine, search SQLite fallback and sync
+    if (!user && sqliteDb) {
+      const fallbackUser = await new Promise((resolve) => {
+        sqliteDb.get(
+          `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
+           FROM users WHERE LOWER(email) = ? OR LOWER(full_name) = ?`,
+          [cleanEmail, cleanEmail],
+          (err, row) => resolve(row || null)
+        );
+      });
+      if (fallbackUser) {
+        user = fallbackUser;
+        // Auto-sync into active engine
+        await run(
+          `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, login_method, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'password', ?, ?)`,
+          [
+            fallbackUser.id,
+            fallbackUser.email,
+            fallbackUser.password_hash,
+            fallbackUser.full_name,
+            fallbackUser.company || null,
+            fallbackUser.phone || null,
+            fallbackUser.role || 'customer',
+            fallbackUser.status || 'active',
+            fallbackUser.created_at || new Date().toISOString(),
+            new Date().toISOString(),
+          ]
+        ).catch(() => {});
+      }
     }
 
     if (!user || !user.password_hash) {
       return res.status(401).json({ error: 'Invalid work email or password.' });
     }
 
-    const matches = await bcrypt.compare(password, user.password_hash);
+    if (user.status && user.status.toLowerCase() === 'inactive') {
+      return res.status(403).json({ error: 'Your account is currently inactive. Please contact support.' });
+    }
+
+    const matches = await bcrypt.compare(password.trim(), user.password_hash);
     if (!matches) {
       return res.status(401).json({ error: 'Invalid work email or password.' });
     }

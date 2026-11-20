@@ -37,6 +37,12 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static assets (certificates, resources, images) from public folder
+const publicPath = path.resolve(__dirname, '../public');
+app.use(express.static(publicPath));
+app.use('/certificates', express.static(path.join(publicPath, 'certificates')));
+app.use('/resources', express.static(path.join(publicPath, 'resources')));
+
 // Rate limiting on sensitive auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

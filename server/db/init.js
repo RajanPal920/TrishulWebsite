@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'node:url';
-import { db, exec, get, run, all } from './connection.js';
+import { db, exec, get, run, all, getActiveEngine, ensureConnected, sqliteDb } from './connection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,43 +60,86 @@ const STOCK_ITEMS_SEED = [
 ];
 
 export async function initDatabase() {
-  const schemaPath = path.join(__dirname, 'schema.sql');
-  const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  await ensureConnected();
+  const engine = getActiveEngine();
+  const schemaFile = engine === 'mysql' ? 'schema.mysql.sql' : 'schema.sql';
+  const schemaPath = path.join(__dirname, schemaFile);
 
-  console.log('[DB] Applying database schema...');
-  await exec(schemaSql);
-  console.log('[DB] Schema applied successfully.');
+  console.log(`[DB] Applying database schema for engine '${engine}' using ${schemaFile}...`);
+  try {
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    // On MySQL, split statements by semicolon if needed or run directly
+    if (engine === 'mysql') {
+      const statements = schemaSql
+        .split(/;\s*$/m)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && !s.startsWith('--') && !s.toUpperCase().startsWith('CREATE DATABASE') && !s.toUpperCase().startsWith('USE '));
+      for (const stmt of statements) {
+        try {
+          await exec(stmt);
+        } catch (stmtErr) {
+          // ignore already exists or duplicate index errors
+        }
+      }
+    } else {
+      await exec(schemaSql);
+    }
+    console.log('[DB] Schema applied successfully.');
+  } catch (err) {
+    console.warn('[DB Notice] Schema execution warning:', err.message);
+  }
 
-  // Safe schema migration for last_login_at, role, and login_method
-  try {
-    await run('ALTER TABLE users ADD COLUMN last_login_at TEXT');
-  } catch {
-    // Column already exists, safe to ignore
+  // Safe schema migration for last_login_at, role, login_method, and status across both engines
+  const migrations = [
+    'ALTER TABLE users ADD COLUMN last_login_at TEXT',
+    "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'",
+    "ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password'",
+    "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
+    'ALTER TABLE product_requests ADD COLUMN quotation_amount REAL',
+    'ALTER TABLE material_requests ADD COLUMN quotation_amount REAL',
+  ];
+  for (const m of migrations) {
+    try {
+      await run(m);
+    } catch {
+      // Column already exists, safe to ignore
+    }
   }
-  try {
-    await run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'");
-  } catch {
-    // Column already exists, safe to ignore
+
+  // Ensure sqlite fallback also has status column if sqliteDb is open
+  if (sqliteDb) {
+    sqliteDb.run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active';", () => {});
+    sqliteDb.run("ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password';", () => {});
+    sqliteDb.run("ALTER TABLE users ADD COLUMN last_login_at TEXT;", () => {});
+    sqliteDb.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer';", () => {});
   }
+
+  // Ensure document_downloads & cad_downloads tables exist
   try {
-    await run("ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password'");
+    await run(`
+      CREATE TABLE IF NOT EXISTS document_downloads (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NULL,
+        doc_id VARCHAR(150) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NULL,
+        company VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS cad_downloads (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NULL,
+        part_code VARCHAR(150) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NULL,
+        company VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   } catch {
-    // Column already exists, safe to ignore
-  }
-  try {
-    await run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
-  } catch {
-    // Column already exists, safe to ignore
-  }
-  try {
-    await run('ALTER TABLE product_requests ADD COLUMN quotation_amount REAL');
-  } catch {
-    // Column already exists, safe to ignore
-  }
-  try {
-    await run('ALTER TABLE material_requests ADD COLUMN quotation_amount REAL');
-  } catch {
-    // Column already exists, safe to ignore
+    // safe to ignore table exists
   }
 
   // Ensure default Owner Administrator exists
@@ -107,11 +150,82 @@ export async function initDatabase() {
     const adminHash = await bcrypt.hash('Admin@Trishul2026!', 10);
     const now = new Date().toISOString();
     await run(
-      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, ?)`,
+      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'admin', 'active', ?, ?)`,
       [adminId, adminEmail, adminHash, 'Owner Administrator', 'Trishul Metals & Alloys', '+91 22 2389 4500', now, now]
     );
     console.log('[DB] Seeded default Owner Administrator: admin@trishulmetal.com');
+  }
+
+  // Bidirectional Synchronization: Sync SQLite users and RFQs into MySQL and vice versa
+  if (sqliteDb) {
+    try {
+      const sqliteUsers = await new Promise((resolve) => {
+        sqliteDb.all('SELECT * FROM users', (err, rows) => resolve(rows || []));
+      });
+
+      const currentUsers = await all('SELECT id, email FROM users');
+      const currentEmailMap = new Map((currentUsers || []).map((u) => [(u.email || '').toLowerCase(), u.id]));
+
+      for (const su of sqliteUsers) {
+        const cleanEmail = (su.email || '').toLowerCase();
+        if (cleanEmail && !currentEmailMap.has(cleanEmail)) {
+          console.log(`[DB Sync] Migrating user from SQLite to active engine: ${cleanEmail} (${su.full_name})`);
+          await run(
+            `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, google_id, avatar_url, login_method, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              su.id || crypto.randomUUID(),
+              cleanEmail,
+              su.password_hash || null,
+              su.full_name || 'Customer',
+              su.company || null,
+              su.phone || null,
+              su.role || 'customer',
+              su.status || 'active',
+              su.google_id || null,
+              su.avatar_url || null,
+              su.login_method || 'password',
+              su.created_at || new Date().toISOString(),
+              su.updated_at || new Date().toISOString(),
+            ]
+          ).catch((e) => console.warn('[DB Sync Notice]:', e.message));
+        }
+      }
+
+      // If active engine is MySQL, ensure SQLite has any users from MySQL
+      if (engine === 'mysql') {
+        const mysqlUsers = await all('SELECT * FROM users');
+        const sqliteEmails = new Set(sqliteUsers.map((u) => (u.email || '').toLowerCase()));
+        for (const mu of mysqlUsers) {
+          const cleanEmail = (mu.email || '').toLowerCase();
+          if (cleanEmail && !sqliteEmails.has(cleanEmail)) {
+            sqliteDb.run(
+              `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, company, phone, role, status, google_id, avatar_url, login_method, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                mu.id,
+                cleanEmail,
+                mu.password_hash || null,
+                mu.full_name,
+                mu.company || null,
+                mu.phone || null,
+                mu.role || 'customer',
+                mu.status || 'active',
+                mu.google_id || null,
+                mu.avatar_url || null,
+                mu.login_method || 'password',
+                mu.created_at ? new Date(mu.created_at).toISOString() : new Date().toISOString(),
+                mu.updated_at ? new Date(mu.updated_at).toISOString() : new Date().toISOString(),
+              ],
+              () => {}
+            );
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[DB Sync Warning]:', syncErr.message);
+    }
   }
 
   // Check if stock_items is populated

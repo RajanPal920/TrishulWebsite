@@ -190,3 +190,29 @@ CREATE TABLE IF NOT EXISTS rfq_requests (
   INDEX idx_rfq_email (email),
   INDEX idx_rfq_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. CAD Downloads Table
+CREATE TABLE IF NOT EXISTS cad_downloads (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NULL,
+  part_code VARCHAR(150) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NULL,
+  company VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cad_dl_email (email),
+  INDEX idx_cad_dl_part (part_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 12. Document Downloads Table
+CREATE TABLE IF NOT EXISTS document_downloads (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NULL,
+  doc_id VARCHAR(150) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NULL,
+  company VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_doc_dl_email (email),
+  INDEX idx_doc_dl_doc (doc_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

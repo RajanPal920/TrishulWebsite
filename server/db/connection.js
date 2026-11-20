@@ -159,6 +159,14 @@ export async function run(sql, params = []) {
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [result] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
+      // Mirror writes to SQLite fallback for permanent offline/fallback persistence
+      if (sqliteDb) {
+        try {
+          sqliteDb.run(sql, params, () => {});
+        } catch {
+          // safe to ignore mirror write error
+        }
+      }
       return {
         lastID: result.insertId,
         insertId: result.insertId,
@@ -209,6 +217,11 @@ export function getActiveEngine() {
   return activeEngine;
 }
 
+export async function ensureConnected() {
+  if (connectionPromise) await connectionPromise;
+  return activeEngine;
+}
+
 export const db = sqliteDb;
 
 export default {
@@ -219,4 +232,5 @@ export default {
   run,
   exec,
   getActiveEngine,
+  ensureConnected,
 };
