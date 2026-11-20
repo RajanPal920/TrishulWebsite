@@ -3,123 +3,142 @@ import { useEffect, useState, useMemo } from "react";
 import {
   LayoutDashboard,
   Users,
-  Clock,
-  Package,
-  Layers,
-  HelpCircle,
-  ShoppingCart,
-  Boxes,
-  FileSpreadsheet,
+  FileText,
   Shield,
-  Settings,
   LogOut,
   Search,
-  Plus,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
-  RefreshCw,
+  Clock,
   Eye,
-  Send,
-  Download,
-  Filter,
   Edit2,
   Phone,
   Mail,
   Building2,
   X,
-  ChevronLeft,
+  ExternalLink,
+  Lock,
+  KeyRound,
+  Filter,
+  Check,
   ChevronRight,
-  UserCheck,
-  UserX,
-  FileText,
-  Calendar,
-  Hash,
+  Database,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { api, type User } from "@/lib/api";
+import { api, type AdminCustomerItem, type RfqInquiryItem } from "@/lib/api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Owner Admin Management Dashboard | Trishul Metals & Alloys" },
-      { name: "description", content: "Owner administrative portal for Trishul Metals & Alloys operations." },
+      { title: "Owner Admin Console | Trishul Metals & Alloys" },
+      { name: "description", content: "Owner administration console for Trishul Metals & Alloys." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
-  component: AdminDashboardPage,
+  component: AdminConsolePage,
 });
 
-type AdminSectionKey =
-  | "overview"
-  | "customers"
-  | "login_activity"
-  | "product_requests"
-  | "material_requests"
-  | "inquiries"
-  | "orders"
-  | "stock"
-  | "reports"
-  | "audit_logs"
-  | "settings";
+type AdminSectionKey = "overview" | "rfqs" | "customers" | "settings";
 
 function formatKolkataTime(isoString?: string | null) {
   if (!isoString) return "Never";
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
-    return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    }).format(d) + " IST";
+    return (
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }).format(d) + " IST"
+    );
   } catch {
     return isoString;
   }
 }
 
-function AdminDashboardPage() {
+function getRfqStatusBadge(status?: string | null) {
+  const s = (status || "new").toLowerCase();
+  if (s.includes("responded") || s.includes("quoted") || s.includes("approved")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+        <CheckCircle2 className="h-3 w-3" />
+        {status || "Responded"}
+      </span>
+    );
+  }
+  if (s.includes("progress") || s.includes("review")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+        <Clock className="h-3 w-3" />
+        {status || "In Progress"}
+      </span>
+    );
+  }
+  if (s.includes("closed") || s.includes("cancelled")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-zinc-600 bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-300">
+        <AlertCircle className="h-3 w-3" />
+        {status || "Closed"}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-400">
+      <Clock className="h-3 w-3" />
+      {status || "New"}
+    </span>
+  );
+}
+
+function AdminConsolePage() {
   const navigate = useNavigate();
   const { user, loading: authLoading, login, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<AdminSectionKey>("overview");
-  const [loadingData, setLoadingData] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
 
-  // Admin login credentials (for non-logged in state)
-  const [adminEmail, setAdminEmail] = useState("");
+  // Admin login credentials (for non-authenticated state)
+  const [adminUsername, setAdminUsername] = useState("admin");
   const [adminPassword, setAdminPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Overview data
-  const [overviewStats, setOverviewStats] = useState<any>(null);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
-  const [recentRequests, setRecentRequests] = useState<any[]>([]);
+  // Overview stats & recent items
+  const [overviewStats, setOverviewStats] = useState<{
+    totalCustomers: number;
+    totalRfqs: number;
+    pendingRfqs: number;
+  }>({ totalCustomers: 0, totalRfqs: 0, pendingRfqs: 0 });
+  const [recentRfqs, setRecentRfqs] = useState<any[]>([]);
 
-  // Customers data & pagination state
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [customersTotal, setCustomersTotal] = useState(0);
+  // RFQ Queries Management
+  const [rfqs, setRfqs] = useState<RfqInquiryItem[]>([]);
+  const [rfqSearch, setRfqSearch] = useState("");
+  const [rfqStatusFilter, setRfqStatusFilter] = useState("all");
+  const [selectedRfq, setSelectedRfq] = useState<RfqInquiryItem | null>(null);
+  const [updatingRfqId, setUpdatingRfqId] = useState<string | null>(null);
+  const [deletingRfqId, setDeletingRfqId] = useState<string | null>(null);
+
+  // Customers Management
+  const [customers, setCustomers] = useState<AdminCustomerItem[]>([]);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [customerMethodFilter, setCustomerMethodFilter] = useState("all");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("all");
-  const [customerSort, setCustomerSort] = useState("registered_desc");
-  const [customerPage, setCustomerPage] = useState(1);
-  const [customerTotalPages, setCustomerTotalPages] = useState(1);
-  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerMethodFilter, setCustomerMethodFilter] = useState("all");
 
-  // Customer Details modal state
-  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [customerDetail, setCustomerDetail] = useState<any | null>(null);
-  const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
-  const [customerDetailTab, setCustomerDetailTab] = useState<"info" | "rfqs" | "orders" | "products" | "materials" | "logins">("info");
+  // Customer Details modal
+  const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerItem | null>(null);
+  const [customerHistory, setCustomerHistory] = useState<RfqInquiryItem[]>([]);
+  const [loadingCustomerHistory, setLoadingCustomerHistory] = useState(false);
 
-  // Edit Customer Modal state
-  const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
+  // Edit Customer Contact modal
+  const [editingCustomer, setEditingCustomer] = useState<AdminCustomerItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -128,80 +147,34 @@ function AdminDashboardPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Login activity
-  const [loginActivity, setLoginActivity] = useState<any[]>([]);
-
-  // Requests & Inquiries
-  const [productRequests, setProductRequests] = useState<any[]>([]);
-  const [materialRequests, setMaterialRequests] = useState<any[]>([]);
-  const [inquiries, setInquiries] = useState<any[]>([]);
-
-  // Orders
-  const [orders, setOrders] = useState<any[]>([]);
-  const [showOrderModal, setShowOrderModal] = useState(false);
-  const [newOrderCustomerId, setNewOrderCustomerId] = useState("");
-  const [newOrderTitle, setNewOrderTitle] = useState("");
-  const [newOrderAmount, setNewOrderAmount] = useState("");
-  const [newOrderTracking, setNewOrderTracking] = useState("");
-  const [orderModalBusy, setOrderModalBusy] = useState(false);
-
-  // Stock items
-  const [stockItems, setStockItems] = useState<any[]>([]);
-  const [showStockModal, setShowStockModal] = useState(false);
-  const [newStockCategory, setNewStockCategory] = useState("Flanges");
-  const [newStockGrade, setNewStockGrade] = useState("");
-  const [newStockProduct, setNewStockProduct] = useState("");
-  const [newStockSize, setNewStockSize] = useState("");
-  const [newStockQty, setNewStockQty] = useState("");
-  const [newStockSpec, setNewStockSpec] = useState("");
-  const [stockModalBusy, setStockModalBusy] = useState(false);
-
-  // Audit logs
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-
-  // Inquiry Response Modal
-  const [respondingInquiry, setRespondingInquiry] = useState<any | null>(null);
-  const [inquiryReplyText, setInquiryReplyText] = useState("");
-  const [replyBusy, setReplyBusy] = useState(false);
-
-  // Quote Update Modal
-  const [quotingRequest, setQuotingRequest] = useState<any | null>(null);
-  const [quoteAmount, setQuoteAmount] = useState("");
-  const [quoteStatus, setQuoteStatus] = useState("Quotation Sent");
-  const [quoteBusy, setQuoteBusy] = useState(false);
-
-  // Feedback notifications
-  const [notice, setNotice] = useState<string | null>(null);
+  // Security / Settings state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const fetchAdminData = async () => {
     if (!user || user.role !== "admin") return;
     setLoadingData(true);
     try {
-      const [ovRes, custRes, actRes, prodsRes, matsRes, inqRes, ordRes, stkRes, logRes] = await Promise.all([
+      const [ovRes, rfqsRes, custRes] = await Promise.all([
         api.admin.getOverview().catch(() => null),
+        api.admin.getRfqs().catch(() => ({ rfqs: [] })),
         api.admin.getCustomers({ limit: 100 }).catch(() => ({ customers: [] })),
-        api.admin.getLoginActivity().catch(() => ({ loginActivity: [] })),
-        api.admin.getProductRequests().catch(() => ({ requests: [] })),
-        api.admin.getMaterialRequests().catch(() => ({ requests: [] })),
-        api.admin.getInquiries().catch(() => ({ inquiries: [] })),
-        api.admin.getOrders().catch(() => ({ orders: [] })),
-        api.admin.getStock().catch(() => ({ stock: [] })),
-        api.admin.getActivityLogs().catch(() => ({ logs: [] })),
       ]);
 
       if (ovRes) {
-        setOverviewStats(ovRes.stats);
-        setRecentUsers(ovRes.recentUsers || []);
-        setRecentRequests(ovRes.recentRequests || []);
+        setOverviewStats({
+          totalCustomers: ovRes.stats?.totalCustomers || 0,
+          totalRfqs: ovRes.stats?.totalRfqs || 0,
+          pendingRfqs: ovRes.stats?.pendingRfqs || 0,
+        });
+        setRecentRfqs(ovRes.recentRfqs || []);
       }
+      setRfqs(rfqsRes.rfqs || []);
       setCustomers(custRes.customers || []);
-      setLoginActivity(actRes.loginActivity || []);
-      setProductRequests(prodsRes.requests || []);
-      setMaterialRequests(matsRes.requests || []);
-      setInquiries(inqRes.inquiries || []);
-      setOrders(ordRes.orders || []);
-      setStockItems(stkRes.stock || []);
-      setAuditLogs(logRes.logs || []);
     } catch (err) {
       console.error("[Admin Data Fetch Error]:", err);
     } finally {
@@ -220,11 +193,13 @@ function AdminDashboardPage() {
     setLoginError(null);
     setLoginBusy(true);
     try {
-      const loggedUser = await login(adminEmail, adminPassword);
+      const loggedUser = await login(adminUsername, adminPassword);
+      setAdminPassword("");
       if (loggedUser.role !== "admin") {
         setLoginError("This account does not have Owner Administrator privileges.");
       }
     } catch (err: any) {
+      setAdminPassword("");
       setLoginError(err?.message || "Invalid administrator credentials.");
     } finally {
       setLoginBusy(false);
@@ -236,293 +211,260 @@ function AdminDashboardPage() {
     void navigate({ to: "/" });
   };
 
-  const fetchCustomers = async (page = customerPage) => {
-    setCustomersLoading(true);
+  const handleDeleteRfq = async (rfqId: string, reference: string) => {
+    if (!window.confirm(`Are you sure you want to delete inquiry ${reference}? This action cannot be undone.`)) {
+      return;
+    }
+    setDeletingRfqId(rfqId);
     try {
-      const res = await api.admin.getCustomers({
-        search: customerSearch,
-        method: customerMethodFilter,
-        status: customerStatusFilter,
-        sort: customerSort,
-        page,
-        limit: 15,
-      });
-      setCustomers(res.customers || []);
-      setCustomersTotal(res.total || 0);
-      setCustomerPage(res.page || 1);
-      setCustomerTotalPages(res.totalPages || 1);
+      await api.admin.deleteRfq(rfqId);
+      setRfqs((prev) => prev.filter((r) => r.id !== rfqId && r.reference !== rfqId));
+      setRecentRfqs((prev) => prev.filter((r) => r.id !== rfqId && r.reference !== rfqId));
+      setCustomerHistory((prev) => prev.filter((r) => r.id !== rfqId && r.reference !== rfqId));
+      setOverviewStats((prev) => ({
+        ...prev,
+        totalRfqs: Math.max(0, prev.totalRfqs - 1),
+      }));
+      if (selectedRfq && (selectedRfq.id === rfqId || selectedRfq.reference === rfqId)) {
+        setSelectedRfq(null);
+      }
     } catch (err: any) {
-      console.error("[Admin Customers Fetch Error]:", err);
+      alert(err?.message || "Failed to delete inquiry.");
     } finally {
-      setCustomersLoading(false);
+      setDeletingRfqId(null);
     }
   };
 
-  // Debounced/responsive customer fetch when filters or sort change
-  useEffect(() => {
-    let timer: any;
-    if (user && user.role === "admin" && activeTab === "customers") {
-      timer = setTimeout(() => {
-        void fetchCustomers(customerPage);
-      }, 200);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [customerSearch, customerMethodFilter, customerStatusFilter, customerSort, customerPage, activeTab]);
-
-  const handleOpenCustomerDetails = async (cust: any) => {
-    setSelectedCustomer(cust);
-    setCustomerDetail(null);
-    setCustomerDetailLoading(true);
-    setCustomerDetailTab("info");
+  const handleUpdateRfqStatus = async (rfqId: string, newStatus: string) => {
+    setUpdatingRfqId(rfqId);
     try {
-      const data = await api.admin.getCustomer(cust.id);
-      setCustomerDetail(data);
-    } catch (err: any) {
-      console.error("[Customer Detail Fetch Error]:", err);
+      await api.admin.updateRfqStatus(rfqId, { status: newStatus });
+      setRfqs((prev) => prev.map((r) => (r.id === rfqId ? { ...r, status: newStatus } : r)));
+      if (selectedRfq && selectedRfq.id === rfqId) {
+        setSelectedRfq((prev) => (prev ? { ...prev, status: newStatus } : null));
+      }
+      // Also update in overview stats & recent list if present
+      setRecentRfqs((prev) => prev.map((r) => (r.id === rfqId ? { ...r, status: newStatus } : r)));
+    } catch (err) {
+      console.error("[Failed to update RFQ status]:", err);
     } finally {
-      setCustomerDetailLoading(false);
+      setUpdatingRfqId(null);
     }
   };
 
-  const handleOpenEditCustomer = (cust: any) => {
-    setEditingCustomer(cust);
-    setEditName(cust.full_name || "");
-    setEditEmail(cust.email || "");
-    setEditPhone(cust.phone || "");
-    setEditCompany(cust.company || "");
-    setEditStatus(cust.status === "inactive" ? "inactive" : "active");
+  const openCustomerDetails = async (customer: AdminCustomerItem) => {
+    setSelectedCustomer(customer);
+    setLoadingCustomerHistory(true);
+    try {
+      const res = await api.admin.getCustomer(customer.id);
+      setCustomerHistory(res.rfqs || []);
+    } catch (err) {
+      console.error("[Failed to load customer inquiry history]:", err);
+      setCustomerHistory([]);
+    } finally {
+      setLoadingCustomerHistory(false);
+    }
+  };
+
+  const openEditCustomer = (customer: AdminCustomerItem) => {
+    setEditingCustomer(customer);
+    setEditName(customer.full_name || "");
+    setEditEmail(customer.email || "");
+    setEditPhone(customer.phone || "");
+    setEditCompany(customer.company || "");
+    setEditStatus(customer.status || "active");
     setEditError(null);
   };
 
-  const handleSaveCustomerEdit = async (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCustomer) return;
     setEditError(null);
-
-    if (!editName.trim() || editName.trim().length < 2) {
-      setEditError("Customer Full Name is required (minimum 2 characters).");
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!editEmail.trim() || !emailRegex.test(editEmail.trim())) {
-      setEditError("A valid work email address is required.");
-      return;
-    }
-
-    if (editPhone.trim()) {
-      const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
-      if (!phoneRegex.test(editPhone.trim())) {
-        setEditError("Invalid phone number format. Please include country code (e.g. +91 98200 12345).");
-        return;
-      }
-    }
-
     setEditBusy(true);
     try {
       const res = await api.admin.updateCustomer(editingCustomer.id, {
-        full_name: editName.trim(),
-        email: editEmail.trim().toLowerCase(),
-        phone: editPhone.trim() || null,
-        company: editCompany.trim() || null,
+        full_name: editName,
+        email: editEmail,
+        phone: editPhone || null,
+        company: editCompany || null,
         status: editStatus,
       });
-
-      setNotice("Customer contact details updated successfully.");
-      setEditingCustomer(null);
-
-      // Refresh table
-      await fetchCustomers(customerPage);
-
-      // If customer detail modal is currently showing this user, update it
+      // Update local state
+      setCustomers((prev) => prev.map((c) => (c.id === editingCustomer.id ? { ...c, ...res.customer } : c)));
       if (selectedCustomer && selectedCustomer.id === editingCustomer.id) {
-        void handleOpenCustomerDetails({ ...selectedCustomer, ...res.customer });
+        setSelectedCustomer((prev) => (prev ? { ...prev, ...res.customer } : null));
       }
+      setEditingCustomer(null);
     } catch (err: any) {
-      setEditError(err?.message || "Failed to update customer account.");
+      setEditError(err?.message || "Failed to update customer details.");
     } finally {
       setEditBusy(false);
     }
   };
 
-  // Immediate in-memory customer filter fallback for instant search typing responsiveness
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordMessage(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+
+    setPasswordBusy(true);
+    try {
+      await api.admin.changePassword({
+        currentPassword,
+        newPassword,
+      });
+      setPasswordMessage("Administrator password updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordMessage(null), 5000);
+    } catch (err: any) {
+      setPasswordError(err?.message || "Failed to update password. Verify current password.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  // Filtered RFQs
+  const filteredRfqs = useMemo(() => {
+    return rfqs.filter((r) => {
+      const matchesSearch =
+        !rfqSearch.trim() ||
+        r.reference?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
+        r.contact_name?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
+        r.company?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
+        r.email?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
+        r.phone?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
+        r.items?.some((i) => i.product?.toLowerCase().includes(rfqSearch.toLowerCase()));
+
+      const matchesStatus =
+        rfqStatusFilter === "all" ||
+        (rfqStatusFilter === "new" &&
+          (r.status.toLowerCase() === "new" ||
+            r.status.toLowerCase() === "submitted" ||
+            r.status.toLowerCase() === "pending review")) ||
+        r.status.toLowerCase() === rfqStatusFilter.toLowerCase();
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [rfqs, rfqSearch, rfqStatusFilter]);
+
+  // Filtered Customers
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return customers;
-    const q = customerSearch.toLowerCase();
-    return customers.filter(
-      (c) =>
-        (c.full_name && c.full_name.toLowerCase().includes(q)) ||
-        (c.email && c.email.toLowerCase().includes(q)) ||
-        (c.company && c.company.toLowerCase().includes(q)) ||
-        (c.phone && c.phone.toLowerCase().includes(q)) ||
-        (c.id && c.id.toLowerCase().includes(q))
-    );
-  }, [customers, customerSearch]);
+    return customers.filter((c) => {
+      const term = customerSearch.trim().toLowerCase();
+      const matchesSearch =
+        !term ||
+        c.full_name?.toLowerCase().includes(term) ||
+        c.email?.toLowerCase().includes(term) ||
+        c.company?.toLowerCase().includes(term) ||
+        c.phone?.toLowerCase().includes(term);
 
-  // Submit quote
-  const handleQuoteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quotingRequest) return;
-    setQuoteBusy(true);
-    try {
-      await api.admin.updateProductRequest(quotingRequest.id, {
-        status: quoteStatus,
-        quotation_amount: parseFloat(quoteAmount) || 0,
-      });
-      setNotice(`Quotation of INR ${quoteAmount} applied to request #${quotingRequest.id.slice(0, 8)}`);
-      setQuotingRequest(null);
-      void fetchAdminData();
-    } catch (err: any) {
-      alert("Failed to submit quotation: " + err.message);
-    } finally {
-      setQuoteBusy(false);
-    }
-  };
+      const matchesStatus =
+        customerStatusFilter === "all" || c.status?.toLowerCase() === customerStatusFilter.toLowerCase();
 
-  // Submit inquiry response
-  const handleInquiryReplySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!respondingInquiry) return;
-    setReplyBusy(true);
-    try {
-      await api.admin.respondInquiry(respondingInquiry.id, {
-        response: inquiryReplyText,
-        status: "Responded",
-      });
-      setNotice(`Response sent to customer regarding "${respondingInquiry.subject}"`);
-      setRespondingInquiry(null);
-      setInquiryReplyText("");
-      void fetchAdminData();
-    } catch (err: any) {
-      alert("Failed to send response: " + err.message);
-    } finally {
-      setReplyBusy(false);
-    }
-  };
+      const matchesMethod =
+        customerMethodFilter === "all" || c.login_method?.toLowerCase() === customerMethodFilter.toLowerCase();
 
-  // Create new order
-  const handleCreateOrderSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newOrderCustomerId || !newOrderTitle) return;
-    setOrderModalBusy(true);
-    try {
-      await api.admin.createOrder({
-        userId: newOrderCustomerId,
-        title: newOrderTitle,
-        totalAmount: parseFloat(newOrderAmount) || 0,
-        trackingNumber: newOrderTracking,
-      });
-      setNotice(`New purchase order recorded successfully.`);
-      setShowOrderModal(false);
-      setNewOrderTitle("");
-      setNewOrderAmount("");
-      setNewOrderTracking("");
-      void fetchAdminData();
-    } catch (err: any) {
-      alert("Failed to create order: " + err.message);
-    } finally {
-      setOrderModalBusy(false);
-    }
-  };
+      return matchesSearch && matchesStatus && matchesMethod;
+    });
+  }, [customers, customerSearch, customerStatusFilter, customerMethodFilter]);
 
-  // Add stock item
-  const handleAddStockSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStockGrade || !newStockCategory) return;
-    setStockModalBusy(true);
-    try {
-      await api.admin.addStock({
-        category: newStockCategory,
-        grade: newStockGrade,
-        product: newStockProduct,
-        size: newStockSize,
-        quantity: parseInt(newStockQty, 10) || 0,
-        spec: newStockSpec,
-        location: "Mumbai",
-      });
-      setNotice(`Inventory stock updated with ${newStockGrade}.`);
-      setShowStockModal(false);
-      setNewStockGrade("");
-      setNewStockProduct("");
-      setNewStockSize("");
-      setNewStockQty("");
-      setNewStockSpec("");
-      void fetchAdminData();
-    } catch (err: any) {
-      alert("Failed to add stock item: " + err.message);
-    } finally {
-      setStockModalBusy(false);
-    }
-  };
-
-  // If unauthenticated, show clean standalone admin login screen (completely isolated from public site)
-  if (!authLoading && !user) {
+  // Loading state
+  if (authLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
-        <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-2xl md:p-8">
-          <div className="flex items-center gap-3 border-b border-border pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-primary/20 text-primary border border-primary/40 font-bold">
-              <Shield className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-foreground">Trishul Metals & Alloys</h1>
-              <p className="text-xs text-muted-foreground font-mono">Owner & Administrator Management Portal</p>
-            </div>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Verifying Administrator Access…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in or not admin -> Admin Login Form
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-md border border-border bg-card/90 p-8 shadow-2xl backdrop-blur">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+            <Shield className="h-7 w-7" />
           </div>
 
-          {loginError && (
-            <div className="mt-4 flex items-center gap-2 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          <div className="text-center">
+            <h1 className="font-serif text-2xl font-bold text-foreground">Owner Administrator Portal</h1>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Sign in with your administrator credentials to access the owner console.
+            </p>
+          </div>
+
+          {loginError ? (
+            <div className="mt-5 flex items-center gap-2 rounded-sm border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-400">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{loginError}</span>
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleAdminLogin} className="mt-6 space-y-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Administrator Work Email
+              <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                Administrator Username
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                placeholder="admin@trishulmetal.com"
-                className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                value={adminUsername}
+                onChange={(e) => setAdminUsername(e.target.value)}
+                placeholder="admin"
+                className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Master Security Key
-              </label>
+              <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Password</label>
               <input
                 type="password"
                 required
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                placeholder="Enter administrator password"
+                className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
               />
             </div>
 
             <button
               type="submit"
               disabled={loginBusy}
-              className="w-full rounded-sm bg-primary py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-sm bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow transition hover:opacity-90 disabled:opacity-50"
             >
-              {loginBusy ? "Authenticating Master Key..." : "Sign In to Admin Dashboard"}
+              {loginBusy ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  Authenticating…
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4" />
+                  Sign In as Administrator
+                </>
+              )}
             </button>
           </form>
 
           <div className="mt-6 border-t border-border/60 pt-4 text-center">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
-            >
-              <span>← Back to User Interface</span>
+            <Link to="/" className="text-xs text-muted-foreground hover:text-primary">
+              &larr; Return to Trishul Metals Public Site
             </Link>
           </div>
         </div>
@@ -530,1955 +472,1126 @@ function AdminDashboardPage() {
     );
   }
 
-  // If logged in as non-admin customer, show standalone restricted page
-  if (user && user.role !== "admin") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-        <div className="w-full max-w-lg rounded-sm border border-destructive/30 bg-card p-8 text-center shadow-2xl">
-          <Shield className="mx-auto h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-xl font-bold text-foreground">Restricted Owner Administration</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            You are currently signed in as <strong>{user.email}</strong>, which has standard Client privileges. Owner administrator permissions are required to access management telemetry.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted"
-            >
-              <span>← Back to User Interface</span>
-            </Link>
-            <Link
-              to="/portal"
-              className="rounded-sm bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground"
-            >
-              Go to Customer Portal
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Authenticated Owner Admin Console
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Standalone Admin Top Header Bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur px-4 py-3 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Left Branding */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-primary/20 text-primary border border-primary/40 font-bold">
+    <div className="min-h-screen bg-background">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:px-8">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded border border-primary/40 bg-primary/10 text-primary">
               <Shield className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-bold uppercase tracking-wider text-foreground">
-                  TRISHUL METALS & ALLOYS
-                </span>
-                <span className="rounded-sm bg-primary/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary border border-primary/30">
-                  OWNER CONSOLE
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                <span>Production Database:</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono text-emerald-400">MySQL trishul_db</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Right Admin Controls */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex flex-col text-right">
-              <span className="font-mono text-xs font-semibold text-foreground">{user?.email}</span>
-              <span className="text-[10px] text-primary font-mono flex items-center justify-end gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                Owner Administrator
+              <span className="font-serif text-sm font-bold tracking-wide text-foreground">
+                TRISHUL METALS & ALLOYS
+              </span>
+              <span className="ml-2 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-primary">
+                Owner Console
               </span>
             </div>
+          </div>
+          <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-mono text-emerald-400 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            MySQL: trishul_db
+          </div>
+        </div>
 
-            <div className="flex items-center gap-2">
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
-                title="Return to public website while keeping admin session active"
-              >
-                <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                <span>Back to User Interface</span>
-              </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/portal"
+            className="hidden items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:border-primary sm:flex"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Customer Portal View
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-red-500/50 hover:text-red-400"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+        </div>
+      </header>
 
+      {/* Main Layout: Sidebar & Content */}
+      <div className="flex min-h-[calc(100vh-4rem)]">
+        {/* Simple Sidebar Navigation */}
+        <aside className="w-56 shrink-0 border-r border-border bg-card/40 p-4">
+          <nav className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "overview"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("rfqs")}
+              className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "rfqs"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <FileText className="h-4 w-4" />
+                Queries / RFQs
+              </div>
+              {overviewStats.totalRfqs > 0 ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    activeTab === "rfqs"
+                      ? "bg-primary-foreground text-primary"
+                      : "bg-primary/20 text-primary"
+                  }`}
+                >
+                  {overviewStats.totalRfqs}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("customers")}
+              className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "customers"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Users className="h-4 w-4" />
+                Customers
+              </div>
+              {overviewStats.totalCustomers > 0 ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    activeTab === "customers"
+                      ? "bg-primary-foreground text-primary"
+                      : "bg-muted text-foreground"
+                  }`}
+                >
+                  {overviewStats.totalCustomers}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "settings"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <KeyRound className="h-4 w-4" />
+              Security / Settings
+            </button>
+          </nav>
+        </aside>
+
+        {/* Dynamic Body Content */}
+        <main className="flex-1 p-6 md:p-8">
+          {/* ======================================================== */}
+          {/* 1. OVERVIEW SECTION                                      */}
+          {/* ======================================================== */}
+          {activeTab === "overview" ? (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Console Overview</h1>
+                <p className="text-xs text-muted-foreground">
+                  Essential business activity metrics and recent customer queries.
+                </p>
+              </div>
+
+              {/* Top Metric Cards */}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-md border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="font-mono text-xs uppercase tracking-wider">Total Customers</span>
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="mt-3 text-3xl font-bold text-foreground">
+                    {overviewStats.totalCustomers}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Registered customer accounts</p>
+                </div>
+
+                <div className="rounded-md border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="font-mono text-xs uppercase tracking-wider">Total Queries / RFQs</span>
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="mt-3 text-3xl font-bold text-foreground">
+                    {overviewStats.totalRfqs}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Customer RFQs submitted</p>
+                </div>
+
+                <div className="rounded-md border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="font-mono text-xs uppercase tracking-wider">New / Pending Queries</span>
+                    <Clock className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <div className="mt-3 text-3xl font-bold text-amber-400">
+                    {overviewStats.pendingRfqs}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Awaiting quotation or response</p>
+                </div>
+              </div>
+
+              {/* Recent Customer Queries */}
+              <div className="rounded-md border border-border bg-card shadow-sm">
+                <div className="flex items-center justify-between border-b border-border p-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Recent Customer Queries</h2>
+                    <p className="text-xs text-muted-foreground">Latest inquiries requiring review and quotation</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("rfqs")}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                  >
+                    View All Queries &rarr;
+                  </button>
+                </div>
+
+                {recentRfqs.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-muted-foreground">
+                    No customer queries logged yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
+                          <th className="px-4 py-2.5">Reference #</th>
+                          <th className="px-4 py-2.5">Customer & Company</th>
+                          <th className="px-4 py-2.5">Product & Grade</th>
+                          <th className="px-4 py-2.5">Quantity</th>
+                          <th className="px-4 py-2.5">Date (IST)</th>
+                          <th className="px-4 py-2.5">Status</th>
+                          <th className="px-4 py-2.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {recentRfqs.map((r) => {
+                          const firstItem = r.items?.[0] || {};
+                          return (
+                            <tr key={r.id} className="hover:bg-muted/20">
+                              <td className="whitespace-nowrap px-4 py-3 font-mono font-bold text-primary">
+                                {r.reference}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-foreground">{r.contact_name || "Customer"}</div>
+                                <div className="text-muted-foreground">{r.company || r.email}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-foreground">
+                                  {firstItem.product || "Custom Order"}
+                                </div>
+                                <div className="text-muted-foreground">{firstItem.material || "Standard"}</div>
+                              </td>
+                              <td className="whitespace-nowrap px-4 py-3">
+                                {firstItem.quantity ? `${firstItem.quantity} ${firstItem.unit || "pcs"}` : "—"}
+                              </td>
+                              <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">
+                                {formatKolkataTime(r.created_at)}
+                              </td>
+                              <td className="whitespace-nowrap px-4 py-3">{getRfqStatusBadge(r.status)}</td>
+                              <td className="whitespace-nowrap px-4 py-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedRfq(r)}
+                                  className="rounded border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* ======================================================== */}
+          {/* 2. QUERIES / RFQS MANAGEMENT                             */}
+          {/* ======================================================== */}
+          {activeTab === "rfqs" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">Query / RFQ Management</h1>
+                  <p className="text-xs text-muted-foreground">
+                    Directly manage customer inquiries, update status, and review technical specifications.
+                  </p>
+                </div>
+
+                {/* Filter and Search */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={rfqSearch}
+                      onChange={(e) => setRfqSearch(e.target.value)}
+                      placeholder="Search ref, customer, product…"
+                      className="w-56 rounded-sm border border-border bg-card py-1.5 pl-8 pr-3 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <select
+                    value={rfqStatusFilter}
+                    onChange={(e) => setRfqStatusFilter(e.target.value)}
+                    className="rounded-sm border border-border bg-card px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="new">New / Submitted</option>
+                    <option value="in progress">In Progress</option>
+                    <option value="responded">Responded</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              {filteredRfqs.length === 0 ? (
+                <div className="rounded-md border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                  No inquiries found matching your filters.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
+                        <th className="px-4 py-3">Reference #</th>
+                        <th className="px-4 py-3">Customer Details</th>
+                        <th className="px-4 py-3">Product & Grade</th>
+                        <th className="px-4 py-3">Quantity</th>
+                        <th className="px-4 py-3">Submission Date (IST)</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredRfqs.map((rfq) => {
+                        const firstItem = rfq.items?.[0] || {};
+                        const extraItemsCount = (rfq.items?.length || 1) - 1;
+
+                        return (
+                          <tr key={rfq.id} className="hover:bg-muted/20">
+                            {/* Ref */}
+                            <td className="whitespace-nowrap px-4 py-3.5 font-mono font-bold text-primary">
+                              {rfq.reference}
+                            </td>
+
+                            {/* Customer */}
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-foreground">{rfq.contact_name || "Customer"}</div>
+                              <div className="text-[11px] text-muted-foreground">{rfq.company || "Individual"}</div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {rfq.email} {rfq.phone ? `• ${rfq.phone}` : ""}
+                              </div>
+                            </td>
+
+                            {/* Product & Grade */}
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-foreground">
+                                {firstItem.product || "Custom Metal Product"}
+                                {extraItemsCount > 0 ? (
+                                  <span className="ml-1.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                                    +{extraItemsCount}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                {firstItem.material ? (
+                                  <span className="rounded bg-primary/10 px-1 py-0.5 font-mono text-primary">
+                                    {firstItem.material}
+                                  </span>
+                                ) : null}
+                                {firstItem.size ? <span>{firstItem.size}</span> : null}
+                              </div>
+                            </td>
+
+                            {/* Quantity */}
+                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-foreground">
+                              {firstItem.quantity ? `${firstItem.quantity} ${firstItem.unit || "pcs"}` : "Per MTO"}
+                            </td>
+
+                            {/* Date (IST) */}
+                            <td className="whitespace-nowrap px-4 py-3.5 font-mono text-muted-foreground">
+                              {formatKolkataTime(rfq.created_at)}
+                            </td>
+
+                            {/* Status with Quick Update Dropdown */}
+                            <td className="whitespace-nowrap px-4 py-3.5">
+                              <select
+                                value={rfq.status}
+                                disabled={updatingRfqId === rfq.id}
+                                onChange={(e) => handleUpdateRfqStatus(rfq.id, e.target.value)}
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground outline-none focus:border-primary"
+                              >
+                                <option value="New">New</option>
+                                <option value="Submitted">Submitted</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Responded">Responded</option>
+                                <option value="Closed">Closed</option>
+                              </select>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedRfq(rfq)}
+                                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  View Details
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={deletingRfqId === rfq.id}
+                                  onClick={() => handleDeleteRfq(rfq.id, rfq.reference)}
+                                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-400"
+                                  title="Delete enquiry"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* ======================================================== */}
+          {/* 3. CUSTOMER MANAGEMENT (REGISTERED DIRECTORY)            */}
+          {/* ======================================================== */}
+          {activeTab === "customers" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">Registered Customers Directory</h1>
+                  <p className="text-xs text-muted-foreground">
+                    Accounts stored securely in MySQL &ldquo;users&rdquo; table. Passwords and hashes are strictly protected.
+                  </p>
+                </div>
+
+                {/* Filter and Search */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      placeholder="Search name, email, company, phone…"
+                      className="w-64 rounded-sm border border-border bg-card py-1.5 pl-8 pr-3 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <select
+                    value={customerStatusFilter}
+                    onChange={(e) => setCustomerStatusFilter(e.target.value)}
+                    className="rounded-sm border border-border bg-card px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+
+                  <select
+                    value={customerMethodFilter}
+                    onChange={(e) => setCustomerMethodFilter(e.target.value)}
+                    className="rounded-sm border border-border bg-card px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="all">All Login Methods</option>
+                    <option value="password">Password</option>
+                  </select>
+                </div>
+              </div>
+
+              {filteredCustomers.length === 0 ? (
+                <div className="rounded-md border border-border bg-card p-12 text-center text-xs text-muted-foreground">
+                  No customer accounts match your search.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
+                        <th className="px-4 py-3">Customer Full Name</th>
+                        <th className="px-4 py-3">Work Email</th>
+                        <th className="px-4 py-3">Phone / Mobile Number</th>
+                        <th className="px-4 py-3">Company / Org</th>
+                        <th className="px-4 py-3">Login Method</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Registered (IST)</th>
+                        <th className="px-4 py-3">Last Login (IST)</th>
+                        <th className="px-4 py-3 text-center">Total Queries</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredCustomers.map((cust) => (
+                        <tr key={cust.id} className="hover:bg-muted/20">
+                          {/* Name */}
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold text-foreground">
+                            {cust.full_name || "—"}
+                          </td>
+
+                          {/* Email */}
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">
+                            {cust.email}
+                          </td>
+
+                          {/* Phone */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {cust.phone ? (
+                              <span className="font-mono text-foreground">{cust.phone}</span>
+                            ) : (
+                              <span className="text-muted-foreground/60">—</span>
+                            )}
+                          </td>
+
+                          {/* Company */}
+                          <td className="whitespace-nowrap px-4 py-3 text-foreground">
+                            {cust.company || <span className="text-muted-foreground/60">—</span>}
+                          </td>
+
+                          {/* Method */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <span
+                              className={`rounded px-1.5 py-0.5 font-mono text-[10px] uppercase font-semibold ${
+                                cust.login_method === "google"
+                                  ? "bg-blue-500/10 text-blue-400 border border-blue-500/30"
+                                  : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                              }`}
+                            >
+                              {cust.login_method || "password"}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                cust.status === "inactive"
+                                  ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                                  : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                              }`}
+                            >
+                              {cust.status || "active"}
+                            </span>
+                          </td>
+
+                          {/* Registered (IST) */}
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">
+                            {formatKolkataTime(cust.created_at)}
+                          </td>
+
+                          {/* Last Login (IST) */}
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">
+                            {formatKolkataTime(cust.last_login_at)}
+                          </td>
+
+                          {/* Total RFQs */}
+                          <td className="whitespace-nowrap px-4 py-3 text-center">
+                            <span className="rounded-full bg-primary/15 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                              {cust.rfq_count || 0}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openCustomerDetails(cust)}
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                title="View customer profile & full inquiry history"
+                              >
+                                History
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openEditCustomer(cust)}
+                                className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                                title="Edit contact info & account status"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* ======================================================== */}
+          {/* 4. SECURITY / SETTINGS                                   */}
+          {/* ======================================================== */}
+          {activeTab === "settings" ? (
+            <div className="mx-auto max-w-xl space-y-6">
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Security &amp; Administrator Settings</h1>
+                <p className="text-xs text-muted-foreground">
+                  Update owner credentials and review system security settings.
+                </p>
+              </div>
+
+              {/* Change Password Card */}
+              <div className="rounded-md border border-border bg-card p-6 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-border pb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+                    <KeyRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Change Owner Password</h2>
+                    <p className="text-xs text-muted-foreground">Set a secure password for administrator sign in</p>
+                  </div>
+                </div>
+
+                {passwordMessage ? (
+                  <div className="mt-4 flex items-center gap-2 rounded-sm border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>{passwordMessage}</span>
+                  </div>
+                ) : null}
+
+                {passwordError ? (
+                  <div className="mt-4 flex items-center gap-2 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-400">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                ) : null}
+
+                <form onSubmit={handleChangePassword} className="mt-5 space-y-4">
+                  <div>
+                    <label className="font-mono text-xs uppercase text-muted-foreground">
+                      Current Password (if set)
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current administrator password"
+                      className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-mono text-xs uppercase text-muted-foreground">New Password *</label>
+                    <input
+                      type="password"
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                      className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-mono text-xs uppercase text-muted-foreground">Confirm New Password *</label>
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={passwordBusy}
+                      className="inline-flex items-center gap-2 rounded-sm bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {passwordBusy ? (
+                        <>
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                          Updating…
+                        </>
+                      ) : (
+                        "Update Administrator Password"
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Console Info Card */}
+              <div className="rounded-md border border-border bg-card p-6 shadow-sm">
+                <h3 className="text-sm font-semibold text-foreground">Console Environment</h3>
+                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between border-b border-border/50 pb-1.5">
+                    <span>Admin Account:</span>
+                    <span className="font-mono text-foreground">{user.email}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/50 pb-1.5">
+                    <span>Database Engine:</span>
+                    <span className="font-mono text-foreground">MySQL (trishul_db on 127.0.0.1:3306)</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/50 pb-1.5">
+                    <span>Role Privileges:</span>
+                    <span className="font-mono uppercase text-primary">Owner Administrator</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span>Session Status:</span>
+                    <span className="font-mono text-emerald-400">Authenticated &amp; Encrypted</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 border-t border-border pt-4">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500 hover:text-white"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sign Out of Admin Console
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </main>
+      </div>
+
+      {/* ======================================================== */}
+      {/* RFQ DETAIL MODAL (ADMIN)                                 */}
+      {/* ======================================================== */}
+      {selectedRfq ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-md border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-primary">{selectedRfq.reference}</span>
+                  {getRfqStatusBadge(selectedRfq.status)}
+                </div>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  Submitted: {formatKolkataTime(selectedRfq.created_at)}
+                </p>
+              </div>
               <button
-                onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors"
-                title="Sign out of administrative session"
+                type="button"
+                onClick={() => setSelectedRfq(null)}
+                className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Sign Out</span>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Quick Status Updater */}
+            <div className="mt-4 flex items-center justify-between rounded-sm border border-border bg-muted/20 p-3">
+              <span className="text-xs font-medium text-foreground">Update Inquiry Status:</span>
+              <select
+                value={selectedRfq.status}
+                onChange={(e) => handleUpdateRfqStatus(selectedRfq.id, e.target.value)}
+                className="rounded border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground outline-none focus:border-primary"
+              >
+                <option value="New">New</option>
+                <option value="Submitted">Submitted</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Responded">Responded</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+
+            {/* Customer Details */}
+            <div className="mt-4 grid grid-cols-2 gap-3 rounded-sm border border-border/60 bg-muted/10 p-3 text-xs">
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Customer Name:</span>
+                <span className="font-medium text-foreground">{selectedRfq.contact_name || "—"}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Company:</span>
+                <span className="font-medium text-foreground">{selectedRfq.company || "—"}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Work Email:</span>
+                <span className="font-medium text-foreground">{selectedRfq.email}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Phone Number:</span>
+                <span className="font-medium text-foreground">{selectedRfq.phone || "—"}</span>
+              </div>
+              {selectedRfq.incoterm ? (
+                <div>
+                  <span className="block font-mono text-[10px] uppercase text-muted-foreground">Incoterm:</span>
+                  <span className="font-medium text-foreground">{selectedRfq.incoterm}</span>
+                </div>
+              ) : null}
+              {selectedRfq.delivery_port ? (
+                <div>
+                  <span className="block font-mono text-[10px] uppercase text-muted-foreground">Destination Port:</span>
+                  <span className="font-medium text-foreground">{selectedRfq.delivery_port}</span>
+                </div>
+              ) : null}
+              {selectedRfq.target_lead_time ? (
+                <div>
+                  <span className="block font-mono text-[10px] uppercase text-muted-foreground">Required Delivery:</span>
+                  <span className="font-medium text-foreground">{selectedRfq.target_lead_time}</span>
+                </div>
+              ) : null}
+              {selectedRfq.certification ? (
+                <div>
+                  <span className="block font-mono text-[10px] uppercase text-muted-foreground">Certification:</span>
+                  <span className="font-medium text-foreground">{selectedRfq.certification}</span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Line items */}
+            <div className="mt-4">
+              <h4 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Line Items</h4>
+              <div className="mt-2 divide-y divide-border rounded-sm border border-border bg-muted/10">
+                {selectedRfq.items && selectedRfq.items.length > 0 ? (
+                  selectedRfq.items.map((item, idx) => (
+                    <div key={idx} className="p-3 text-xs">
+                      <div className="flex items-baseline justify-between">
+                        <span className="font-semibold text-foreground">
+                          {idx + 1}. {item.product || "Custom Metal Product"}
+                        </span>
+                        <span className="font-mono font-bold text-primary">
+                          {item.quantity ? `${item.quantity} ${item.unit || "pcs"}` : "Per MTO"}
+                        </span>
+                      </div>
+                      <div className="mt-1 grid grid-cols-2 gap-2 text-muted-foreground sm:grid-cols-4">
+                        {item.material ? <div>Grade: <span className="text-foreground">{item.material}</span></div> : null}
+                        {item.size ? <div>Size: <span className="text-foreground">{item.size}</span></div> : null}
+                        {item.rating ? <div>Rating: <span className="text-foreground">{item.rating}</span></div> : null}
+                        {item.facing ? <div>Facing: <span className="text-foreground">{item.facing}</span></div> : null}
+                        {item.cutLength ? <div>Cut: <span className="text-foreground">{item.cutLength}</span></div> : null}
+                      </div>
+                      {item.processing && item.processing.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {item.processing.map((proc, pIdx) => (
+                            <span key={pIdx} className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                              {proc}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 text-xs text-muted-foreground">Items logged in customer drawing / MTO.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Customer Message */}
+            {selectedRfq.message ? (
+              <div className="mt-4">
+                <span className="block font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Inquiry Notes &amp; Specifications
+                </span>
+                <p className="mt-1 rounded-sm border border-border bg-card/70 p-3 text-xs text-foreground whitespace-pre-wrap">
+                  {selectedRfq.message}
+                </p>
+              </div>
+            ) : null}
+
+            {/* Testing */}
+            {selectedRfq.testing && selectedRfq.testing.length > 0 ? (
+              <div className="mt-4">
+                <span className="block font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Testing Requirements
+                </span>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {selectedRfq.testing.map((test, tIdx) => (
+                    <span key={tIdx} className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                      {test}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+              <button
+                type="button"
+                disabled={deletingRfqId === selectedRfq.id}
+                onClick={() => handleDeleteRfq(selectedRfq.id, selectedRfq.reference)}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500 hover:text-white transition"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Inquiry
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRfq(null)}
+                className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                Close
               </button>
             </div>
           </div>
         </div>
-      </header>
+      ) : null}
 
-      {/* Main Admin Workspace Panel */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto">
-        {notice && (
-          <div className="mb-6 flex items-center justify-between rounded-sm border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs text-primary">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              <span>{notice}</span>
+      {/* ======================================================== */}
+      {/* CUSTOMER DETAILS & INQUIRY HISTORY MODAL                 */}
+      {/* ======================================================== */}
+      {selectedCustomer ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-md border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-border pb-4">
+              <div>
+                <h3 className="text-base font-bold text-foreground">{selectedCustomer.full_name}</h3>
+                <p className="font-mono text-xs text-muted-foreground">{selectedCustomer.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button onClick={() => setNotice(null)} className="font-bold hover:underline">
-              Dismiss
-            </button>
-          </div>
-        )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Admin Navigation Sidebar (11 Sections) */}
-          <aside className="lg:col-span-3">
-            <div className="sticky top-20 rounded-sm border border-border bg-card p-4 shadow-sm">
-              <div className="border-b border-border pb-3">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <span className="font-mono text-xs font-bold uppercase tracking-wider text-foreground">
-                    OWNER CONSOLE
-                  </span>
-                </div>
-                <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{user?.email}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-mono text-[10px] text-emerald-400">MySQL: trishul_db</span>
-                </div>
+            {/* Profile Overview */}
+            <div className="mt-4 grid grid-cols-2 gap-3 rounded-sm border border-border bg-muted/20 p-4 text-xs">
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Phone Number:</span>
+                <span className="font-medium text-foreground">{selectedCustomer.phone || "Not provided"}</span>
               </div>
-
-              <nav className="mt-4 space-y-1">
-                <button
-                  onClick={() => setActiveTab("overview")}
-                  className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "overview"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <LayoutDashboard className="h-3.5 w-3.5" />
-                  <span>Overview & KPIs</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("customers")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "customers"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Users className="h-3.5 w-3.5" />
-                    <span>All Customers</span>
-                  </div>
-                  <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{customers.length}</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("login_activity")}
-                  className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "login_activity"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Login Activity</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("product_requests")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "product_requests"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Package className="h-3.5 w-3.5" />
-                    <span>Product RFQs</span>
-                  </div>
-                  {productRequests.length > 0 && (
-                    <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{productRequests.length}</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("material_requests")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "material_requests"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Layers className="h-3.5 w-3.5" />
-                    <span>Material Requisitions</span>
-                  </div>
-                  {materialRequests.length > 0 && (
-                    <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{materialRequests.length}</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("inquiries")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "inquiries"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <HelpCircle className="h-3.5 w-3.5" />
-                    <span>Customer Inquiries</span>
-                  </div>
-                  {inquiries.length > 0 && (
-                    <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{inquiries.length}</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("orders")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "orders"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <ShoppingCart className="h-3.5 w-3.5" />
-                    <span>Purchases & Orders</span>
-                  </div>
-                  {orders.length > 0 && (
-                    <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{orders.length}</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("stock")}
-                  className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "stock"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Boxes className="h-3.5 w-3.5" />
-                    <span>Stock Inventory</span>
-                  </div>
-                  <span className="rounded-full bg-black/20 px-1.5 py-0.2 text-[10px]">{stockItems.length}</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("reports")}
-                  className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "reports"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  <span>Reports & Export</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("audit_logs")}
-                  className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "audit_logs"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>Admin Audit Logs</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("settings")}
-                  className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
-                    activeTab === "settings"
-                      ? "bg-primary text-primary-foreground font-semibold shadow-[var(--shadow-gold)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                  <span>System Diagnostics</span>
-                </button>
-
-                <div className="border-t border-border pt-2 mt-2 space-y-1">
-                  <Link
-                    to="/"
-                    className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/50 hover:text-primary transition-colors"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                    <span>Back to User Interface</span>
-                  </Link>
-                  <Link
-                    to="/portal"
-                    className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                    <span>View Customer Portal</span>
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              </nav>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Company:</span>
+                <span className="font-medium text-foreground">{selectedCustomer.company || "Not provided"}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Login Method:</span>
+                <span className="font-medium capitalize text-foreground">{selectedCustomer.login_method}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Account Status:</span>
+                <span className="font-medium capitalize text-foreground">{selectedCustomer.status}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Registration Date (IST):</span>
+                <span className="font-mono text-muted-foreground">{formatKolkataTime(selectedCustomer.created_at)}</span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Last Login (IST):</span>
+                <span className="font-mono text-muted-foreground">{formatKolkataTime(selectedCustomer.last_login_at)}</span>
+              </div>
             </div>
-          </aside>
 
-          {/* Main Admin Workspace Panel */}
-          <main className="lg:col-span-9">
-            {/* 1. OVERVIEW & KPIS */}
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                <div className="rounded-sm border border-border bg-card p-6 shadow-sm">
-                  <h2 className="font-mono text-sm font-bold uppercase tracking-wider text-primary">
-                    TRISHUL METALS TELEMETRY OVERVIEW
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Live operational metrics sourced directly from MySQL (<span className="text-foreground">trishul_db</span>)
-                  </p>
+            {/* Customer Inquiries History */}
+            <div className="mt-5">
+              <h4 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                Inquiry &amp; RFQ History ({customerHistory.length})
+              </h4>
 
-                  <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Registered Customers</p>
-                      <p className="mt-2 font-mono text-2xl font-bold text-foreground">
-                        {overviewStats?.totalCustomers ?? customers.length}
-                      </p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pending RFQs</p>
-                      <p className="mt-2 font-mono text-2xl font-bold text-amber-500">
-                        {overviewStats?.productRequests?.pending ?? 0}
-                      </p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Active Orders</p>
-                      <p className="mt-2 font-mono text-2xl font-bold text-emerald-500">
-                        {overviewStats?.orders?.active ?? orders.length}
-                      </p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Open Inquiries</p>
-                      <p className="mt-2 font-mono text-2xl font-bold text-primary">
-                        {overviewStats?.inquiries?.open ?? inquiries.length}
-                      </p>
-                    </div>
-                  </div>
+              {loadingCustomerHistory ? (
+                <div className="mt-2 flex items-center justify-center py-6 text-xs text-muted-foreground">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" />
+                  Loading inquiry history…
                 </div>
-
-                {/* Recent Inquiries & Customers */}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  <div className="rounded-sm border border-border bg-card p-5">
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Recently Registered Customers</h3>
-                      <button onClick={() => setActiveTab("customers")} className="text-[11px] text-primary hover:underline">
-                        View All
-                      </button>
-                    </div>
-                    <div className="mt-3 divide-y divide-border/60">
-                      {(recentUsers.length > 0 ? recentUsers : customers.slice(0, 5)).map((c) => (
-                        <div key={c.id} className="py-2.5 text-xs">
-                          <p className="font-semibold text-foreground">{c.full_name || "Customer"}</p>
-                          <p className="font-mono text-[11px] text-muted-foreground">{c.email}</p>
-                          <p className="text-[10px] text-[#F5F5F5]">{c.company || "Independent Buyer"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-sm border border-border bg-card p-5">
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Recent Customer Requisitions</h3>
-                      <button onClick={() => setActiveTab("product_requests")} className="text-[11px] text-primary hover:underline">
-                        View All
-                      </button>
-                    </div>
-                    <div className="mt-3 divide-y divide-border/60">
-                      {productRequests.slice(0, 5).map((r) => (
-                        <div key={r.id} className="py-2.5 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-foreground">{r.product_name}</span>
-                            <span className="font-mono text-[10px] text-primary">{r.quantity}</span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">{r.customer_name} ({r.customer_company || "Client"})</p>
-                          <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[9px] uppercase font-mono">{r.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              ) : customerHistory.length === 0 ? (
+                <div className="mt-2 rounded-sm border border-border p-4 text-center text-xs text-muted-foreground">
+                  No RFQ inquiries submitted by this customer yet.
                 </div>
-              </div>
-            )}
-
-            {/* 2. ALL CUSTOMERS */}
-            {activeTab === "customers" && (
-              <div className="space-y-4">
-                {/* Search, Filter & Summary Bar */}
-                <div className="rounded-sm border border-border bg-card p-4 space-y-3">
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                          Registered Customers Directory
-                        </h2>
-                        {customersLoading && (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Verified customer accounts stored in MySQL `users` table with telephone numbers & inquiry history
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-start sm:self-auto">
-                      <span className="rounded-full bg-primary/15 border border-primary/30 px-3 py-1 font-mono text-xs font-semibold text-primary">
-                        Total: {customersTotal} Customers
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Filter Toolbar */}
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5 pt-3 border-t border-border/60">
-                    {/* Search Field */}
-                    <div className="relative lg:col-span-2">
-                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="Search by name, company, email, phone, ID..."
-                        value={customerSearch}
-                        onChange={(e) => {
-                          setCustomerSearch(e.target.value);
-                          setCustomerPage(1);
-                        }}
-                        className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                      />
-                    </div>
-
-                    {/* Login Method Filter */}
-                    <div>
-                      <select
-                        value={customerMethodFilter}
-                        onChange={(e) => {
-                          setCustomerMethodFilter(e.target.value);
-                          setCustomerPage(1);
-                        }}
-                        className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                      >
-                        <option value="all">All Login Methods</option>
-                        <option value="google">Google OAuth</option>
-                        <option value="password">Email & Password</option>
-                      </select>
-                    </div>
-
-                    {/* Account Status Filter */}
-                    <div>
-                      <select
-                        value={customerStatusFilter}
-                        onChange={(e) => {
-                          setCustomerStatusFilter(e.target.value);
-                          setCustomerPage(1);
-                        }}
-                        className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="active">Active Accounts</option>
-                        <option value="inactive">Inactive Accounts</option>
-                      </select>
-                    </div>
-
-                    {/* Sort Dropdown */}
-                    <div>
-                      <select
-                        value={customerSort}
-                        onChange={(e) => {
-                          setCustomerSort(e.target.value);
-                          setCustomerPage(1);
-                        }}
-                        className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                      >
-                        <option value="registered_desc">Newest Registered</option>
-                        <option value="registered_asc">Oldest Registered</option>
-                        <option value="login_desc">Recently Active</option>
-                        <option value="name_asc">Customer Name (A-Z)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Customers Table */}
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full min-w-[1100px] text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-3.5 py-3 min-w-[170px]">Customer Name</th>
-                        <th className="px-3 py-3 min-w-[180px]">Work Email</th>
-                        <th className="px-3 py-3 min-w-[140px]">Phone / Mobile</th>
-                        <th className="px-3 py-3 min-w-[140px]">Company</th>
-                        <th className="px-2.5 py-3 text-center min-w-[95px]">Method</th>
-                        <th className="px-2.5 py-3 text-center min-w-[90px]">Status</th>
-                        <th className="px-3 py-3 min-w-[150px]">Registered (IST)</th>
-                        <th className="px-3 py-3 min-w-[150px]">Last Active (IST)</th>
-                        <th className="px-2 py-3 text-center min-w-[70px]">RFQs</th>
-                        <th className="px-2 py-3 text-center min-w-[70px]">Orders</th>
-                        <th className="px-3.5 py-3 text-right min-w-[140px]">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {filteredCustomers.length === 0 ? (
-                        <tr>
-                          <td colSpan={11} className="py-8 text-center text-xs text-muted-foreground">
-                            {customersLoading ? "Loading customers..." : "No matching customer records found."}
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredCustomers.map((c) => (
-                          <tr key={c.id} className="hover:bg-muted/20 transition-colors">
-                            {/* 1. Customer Name */}
-                            <td className="px-3.5 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary text-xs font-bold uppercase border border-primary/30">
-                                  {c.full_name?.charAt(0) || "C"}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCustomerDetails(c)}
-                                  className="text-left font-semibold text-foreground hover:text-primary transition-colors truncate max-w-[140px]"
-                                  title={c.full_name}
-                                >
-                                  {c.full_name}
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* 2. Work Email */}
-                            <td className="px-3 py-3">
-                              <span className="font-mono text-[11px] text-muted-foreground truncate block max-w-[180px]" title={c.email}>
-                                {c.email}
-                              </span>
-                            </td>
-
-                            {/* 3. Phone / Mobile Number */}
-                            <td className="px-3 py-3">
-                              {c.phone && c.phone.trim() ? (
-                                <span className="font-mono text-[11px] text-foreground font-medium">
-                                  {c.phone}
-                                </span>
-                              ) : (
-                                <span className="text-[11px] italic text-[#EAEAEA]">
-                                  Not Provided
-                                </span>
-                              )}
-                            </td>
-
-                            {/* 4. Company */}
-                            <td className="px-3 py-3">
-                              <span className="text-muted-foreground truncate block max-w-[140px]" title={c.company || "—"}>
-                                {c.company && c.company.trim() ? c.company : "—"}
-                              </span>
-                            </td>
-
-                            {/* 5. Login Method */}
-                            <td className="px-2.5 py-3 text-center">
-                              <span
-                                className={`inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase font-semibold ${
-                                  c.login_method === "google"
-                                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                    : "bg-primary/10 text-primary border border-primary/20"
-                                }`}
-                              >
-                                {c.login_method || "password"}
-                              </span>
-                            </td>
-
-                            {/* 6. Account Status */}
-                            <td className="px-2.5 py-3 text-center">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase font-semibold ${
-                                  c.status === "inactive"
-                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                    : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                }`}
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${
-                                    c.status === "inactive" ? "bg-amber-400" : "bg-emerald-400"
-                                  }`}
-                                />
-                                {c.status || "active"}
-                              </span>
-                            </td>
-
-                            {/* 7. Registration (IST) */}
-                            <td className="px-3 py-3 font-mono text-[10px] text-muted-foreground whitespace-nowrap">
-                              {formatKolkataTime(c.created_at)}
-                            </td>
-
-                            {/* 8. Last Active (IST) */}
-                            <td className="px-3 py-3 font-mono text-[10px] text-muted-foreground whitespace-nowrap">
-                              {formatKolkataTime(c.last_login_at)}
-                            </td>
-
-                            {/* 9. Total RFQ Inquiries */}
-                            <td className="px-2 py-3 text-center">
-                              <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary border border-primary/20">
-                                {c.rfq_count ?? 0}
-                              </span>
-                            </td>
-
-                            {/* 10. Total Orders */}
-                            <td className="px-2 py-3 text-center">
-                              <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground border border-border/80">
-                                {c.orders_count ?? 0}
-                              </span>
-                            </td>
-
-                            {/* 11. Actions */}
-                            <td className="px-3.5 py-3 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCustomerDetails(c)}
-                                  className="inline-flex items-center gap-1 rounded-sm bg-muted/80 px-2 py-1 text-[11px] font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
-                                  title="View full customer profile & history"
-                                >
-                                  <Eye className="h-3 w-3" />
-                                  <span>Details</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditCustomer(c)}
-                                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                  title="Edit customer contact details"
-                                >
-                                  <Edit2 className="h-3 w-3" />
-                                  <span>Edit</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-
-                  {/* Pagination Footer */}
-                  <div className="flex flex-col items-center justify-between gap-3 border-t border-border px-4 py-3 sm:flex-row text-xs text-muted-foreground">
-                    <div>
-                      Showing{" "}
-                      <span className="font-semibold text-foreground">
-                        {filteredCustomers.length === 0 ? 0 : (customerPage - 1) * 15 + 1}
-                      </span>{" "}
-                      to{" "}
-                      <span className="font-semibold text-foreground">
-                        {Math.min(customerPage * 15, customersTotal)}
-                      </span>{" "}
-                      of{" "}
-                      <span className="font-semibold text-foreground">{customersTotal}</span> registered customers
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        disabled={customerPage <= 1 || customersLoading}
-                        onClick={() => {
-                          const p = customerPage - 1;
-                          setCustomerPage(p);
-                          void fetchCustomers(p);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2.5 py-1 text-xs font-medium disabled:opacity-40 hover:bg-muted"
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" />
-                        <span>Previous</span>
-                      </button>
-
-                      <span className="px-2 font-mono text-xs">
-                        Page {customerPage} of {Math.max(1, customerTotalPages)}
-                      </span>
-
-                      <button
-                        type="button"
-                        disabled={customerPage >= customerTotalPages || customersLoading}
-                        onClick={() => {
-                          const p = customerPage + 1;
-                          setCustomerPage(p);
-                          void fetchCustomers(p);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2.5 py-1 text-xs font-medium disabled:opacity-40 hover:bg-muted"
-                      >
-                        <span>Next</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. LOGIN ACTIVITY (Asia/Kolkata Timestamps) */}
-            {activeTab === "login_activity" && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Customer & Admin Login History</h2>
-                  <p className="text-xs text-muted-foreground">Real-time audit log stamped in Asia/Kolkata timezone</p>
-                </div>
-
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3">User</th>
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Method</th>
-                        <th className="px-4 py-3">IP Address</th>
-                        <th className="px-4 py-3">Timestamp (Asia/Kolkata)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {loginActivity.map((l) => (
-                        <tr key={l.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-foreground">{l.full_name || l.email}</p>
-                            <p className="font-mono text-[10px] text-muted-foreground">{l.email}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase">
-                              {l.role}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase ${
-                              l.login_method === "google" ? "bg-blue-500/10 text-blue-400" : "bg-primary/10 text-primary"
-                            }`}>
-                              {l.login_method}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[10px] text-muted-foreground">{l.ip_address || "127.0.0.1"}</td>
-                          <td className="px-4 py-3 font-mono text-[10px] text-primary">{formatKolkataTime(l.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 4. PRODUCT RFQS & QUOTATION MANAGEMENT */}
-            {activeTab === "product_requests" && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Customer Cut-to-Size Product RFQs</h2>
-                  <p className="text-xs text-muted-foreground">Review incoming requisitions and assign formal price quotes</p>
-                </div>
-
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3">Customer</th>
-                        <th className="px-4 py-3">Product Spec</th>
-                        <th className="px-4 py-3">Material / Grade</th>
-                        <th className="px-4 py-3">Quantity</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Quote (INR)</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {productRequests.map((r) => (
-                        <tr key={r.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-foreground">{r.customer_name}</p>
-                            <p className="font-mono text-[10px] text-muted-foreground">{r.customer_company || r.customer_email}</p>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-foreground">{r.product_name}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{r.material || "CRA Grade"}</td>
-                          <td className="px-4 py-3 font-mono text-primary">{r.quantity}</td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase">
-                              {r.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-foreground font-semibold">
-                            {r.quotation_amount ? `₹${r.quotation_amount.toLocaleString()}` : "Pending"}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => {
-                                setQuotingRequest(r);
-                                setQuoteAmount(String(r.quotation_amount || ""));
-                              }}
-                              className="rounded-sm bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground"
-                            >
-                              Quote / Update
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 5. PURCHASES & ORDERS */}
-            {activeTab === "orders" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Purchase Order Fulfillment</h2>
-                    <p className="text-xs text-muted-foreground">Manage confirmed client purchase orders & dispatch tracking</p>
-                  </div>
-                  <button
-                    onClick={() => setShowOrderModal(true)}
-                    className="flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Record New Order</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3">Order #</th>
-                        <th className="px-4 py-3">Customer</th>
-                        <th className="px-4 py-3">Title / Description</th>
-                        <th className="px-4 py-3">Amount</th>
-                        <th className="px-4 py-3">Fulfillment Status</th>
-                        <th className="px-4 py-3">Tracking</th>
-                        <th className="px-4 py-3">Date (IST)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {orders.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                            No orders recorded yet. Click "Record New Order" above to issue an order.
-                          </td>
-                        </tr>
-                      ) : (
-                        orders.map((o) => (
-                          <tr key={o.id} className="hover:bg-muted/20">
-                            <td className="px-4 py-3 font-mono text-primary font-bold">{o.order_number}</td>
-                            <td className="px-4 py-3">
-                              <p className="font-semibold text-foreground">{o.customer_name}</p>
-                              <p className="font-mono text-[10px] text-muted-foreground">{o.customer_email}</p>
-                            </td>
-                            <td className="px-4 py-3 text-foreground">{o.title}</td>
-                            <td className="px-4 py-3 font-mono font-bold">₹{parseFloat(o.total_amount).toLocaleString()}</td>
-                            <td className="px-4 py-3">
-                              <span className="rounded-sm bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase text-emerald-400">
-                                {o.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                              {o.tracking_number || "Awaiting BL"}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-[10px] text-muted-foreground">
-                              {formatKolkataTime(o.created_at)}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 6. STOCK & INVENTORY MANAGEMENT */}
-            {activeTab === "stock" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Mumbai Warehouse Certified Inventory</h2>
-                    <p className="text-xs text-muted-foreground">Certified CRA piping items stored in MySQL `stock_items`</p>
-                  </div>
-                  <button
-                    onClick={() => setShowStockModal(true)}
-                    className="flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Stock Item</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3">Category</th>
-                        <th className="px-4 py-3">Grade</th>
-                        <th className="px-4 py-3">Product Form</th>
-                        <th className="px-4 py-3">Size & Rating</th>
-                        <th className="px-4 py-3">Available Qty</th>
-                        <th className="px-4 py-3">Warehouse</th>
-                        <th className="px-4 py-3 text-right">Delete</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {stockItems.map((stk) => (
-                        <tr key={stk.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3 font-semibold text-foreground">{stk.category}</td>
-                          <td className="px-4 py-3 font-bold text-primary">{stk.grade}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{stk.product}</td>
-                          <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                            {stk.size || stk.size_range} {stk.rating ? `(${stk.rating})` : ""}
-                          </td>
-                          <td className="px-4 py-3 font-mono font-bold text-foreground">
-                            {stk.quantity} {stk.unit || "pcs"}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">{stk.location || "Mumbai"}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={async () => {
-                                if (confirm(`Remove ${stk.grade} from stock?`)) {
-                                  await api.admin.deleteStock(stk.id);
-                                  void fetchAdminData();
-                                }
-                              }}
-                              className="text-destructive hover:underline text-[11px]"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 7. REPORTS & CSV EXPORT */}
-            {activeTab === "reports" && (
-              <div className="space-y-6">
-                <div className="rounded-sm border border-border bg-card p-6">
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Business Reports & Data Extraction</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">Export clean, structured business data in standard CSV format</p>
-
-                  <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <h3 className="text-xs font-bold text-foreground">Customer Accounts Directory</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Includes customer name, email, company, contact number, login method, and registration dates.
-                      </p>
-                      <a
-                        href="/api/admin/export-csv?type=customers"
-                        download
-                        className="mt-4 inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Download Customers CSV</span>
-                      </a>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <h3 className="text-xs font-bold text-foreground">Client Purchase Orders Report</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Includes PO numbers, customer contact details, item titles, order values, currency, and fulfillment status.
-                      </p>
-                      <a
-                        href="/api/admin/export-csv?type=orders"
-                        download
-                        className="mt-4 inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Download Orders CSV</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 8. AUDIT LOGS */}
-            {activeTab === "audit_logs" && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Administrator Audit Trail</h2>
-                  <p className="text-xs text-muted-foreground">Immutable log of operations executed by administrators</p>
-                </div>
-
-                <div className="overflow-x-auto rounded-sm border border-border bg-card">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3">Admin</th>
-                        <th className="px-4 py-3">Action</th>
-                        <th className="px-4 py-3">Target</th>
-                        <th className="px-4 py-3">Details</th>
-                        <th className="px-4 py-3">IP Address</th>
-                        <th className="px-4 py-3">Timestamp (IST)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {auditLogs.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                            No administrative audit records logged yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        auditLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-muted/20">
-                            <td className="px-4 py-3 font-semibold text-foreground">{log.admin_email}</td>
-                            <td className="px-4 py-3 font-mono text-[10px] text-primary">{log.action}</td>
-                            <td className="px-4 py-3 text-muted-foreground">{log.target_type}</td>
-                            <td className="px-4 py-3 text-foreground">{log.details || "—"}</td>
-                            <td className="px-4 py-3 font-mono text-[10px] text-muted-foreground">{log.ip_address}</td>
-                            <td className="px-4 py-3 font-mono text-[10px] text-muted-foreground">
-                              {formatKolkataTime(log.created_at)}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 9. SYSTEM DIAGNOSTICS & SETTINGS */}
-            {activeTab === "settings" && (
-              <div className="space-y-6">
-                <div className="rounded-sm border border-border bg-card p-6">
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Trishul Metals Architecture Status</h2>
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <span className="font-mono text-[11px] text-muted-foreground">Primary Database</span>
-                      <p className="mt-1 font-mono text-sm font-bold text-emerald-400">MySQL Server 8.0 (trishul_db)</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Pool limit: 15 connections, keepalive active</p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <span className="font-mono text-[11px] text-muted-foreground">Google OAuth 2.0</span>
-                      <p className="mt-1 font-mono text-sm font-bold text-primary">PKCE (RFC 7636) Enabled</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Direct Node.js backend callback</p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <span className="font-mono text-[11px] text-muted-foreground">Session Protocol</span>
-                      <p className="mt-1 font-mono text-sm font-bold text-foreground">HTTP-Only SameSite=Lax (trishul_session)</p>
-                      <p className="mt-1 text-xs text-muted-foreground">30-day persistent server-side token table</p>
-                    </div>
-
-                    <div className="rounded-sm border border-border bg-card/60 p-4">
-                      <span className="font-mono text-[11px] text-muted-foreground">Timezone Standard</span>
-                      <p className="mt-1 font-mono text-sm font-bold text-foreground">Asia/Kolkata (IST)</p>
-                      <p className="mt-1 text-xs text-muted-foreground">All business telemetry converted to IST</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </main>
-        </div>
-
-        {/* Modal: Quotation Assignment */}
-        {quotingRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-xl">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Set Price Quotation for RFQ
-              </h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Customer: <strong>{quotingRequest.customer_name}</strong> ({quotingRequest.product_name})
-              </p>
-
-              <form onSubmit={handleQuoteSubmit} className="mt-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Status</label>
-                  <select
-                    value={quoteStatus}
-                    onChange={(e) => setQuoteStatus(e.target.value)}
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  >
-                    <option value="Quotation Sent">Quotation Sent</option>
-                    <option value="Under Evaluation">Under Evaluation</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Fulfilled">Fulfilled</option>
-                    <option value="Closed">Closed</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Quotation Total (INR)</label>
-                  <input
-                    type="number"
-                    required
-                    value={quoteAmount}
-                    onChange={(e) => setQuoteAmount(e.target.value)}
-                    placeholder="e.g. 175000"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setQuotingRequest(null)}
-                    className="rounded-sm border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={quoteBusy}
-                    className="rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    {quoteBusy ? "Saving..." : "Save & Update Quote"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: Record New Order */}
-        {showOrderModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-xl">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Record New Client Purchase Order
-              </h3>
-              <form onSubmit={handleCreateOrderSubmit} className="mt-4 space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Select Customer</label>
-                  <select
-                    required
-                    value={newOrderCustomerId}
-                    onChange={(e) => setNewOrderCustomerId(e.target.value)}
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  >
-                    <option value="">-- Choose Customer --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.full_name} ({c.company || c.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Order Title / Products</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOrderTitle}
-                    onChange={(e) => setNewOrderTitle(e.target.value)}
-                    placeholder="e.g. 50 pcs Inconel 625 4-inch Weld Neck Flanges"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Total Amount (INR)</label>
-                  <input
-                    type="number"
-                    required
-                    value={newOrderAmount}
-                    onChange={(e) => setNewOrderAmount(e.target.value)}
-                    placeholder="e.g. 450000"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Tracking Number / BL Reference</label>
-                  <input
-                    type="text"
-                    value={newOrderTracking}
-                    onChange={(e) => setNewOrderTracking(e.target.value)}
-                    placeholder="e.g. TM-BL-2026-8812"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowOrderModal(false)}
-                    className="rounded-sm border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={orderModalBusy}
-                    className="rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    {orderModalBusy ? "Saving..." : "Save Order"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: Add Stock Item */}
-        {showStockModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-sm border border-border bg-card p-6 shadow-xl">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Add Certified Inventory to Mumbai Stock
-              </h3>
-              <form onSubmit={handleAddStockSubmit} className="mt-4 space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Category</label>
-                  <select
-                    value={newStockCategory}
-                    onChange={(e) => setNewStockCategory(e.target.value)}
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  >
-                    <option value="Flanges">Flanges</option>
-                    <option value="Fittings">Fittings</option>
-                    <option value="Pipes">Pipes</option>
-                    <option value="Round Bars">Round Bars</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Material Grade</label>
-                  <input
-                    type="text"
-                    required
-                    value={newStockGrade}
-                    onChange={(e) => setNewStockGrade(e.target.value)}
-                    placeholder="e.g. Inconel 625, UNS S32750, Monel 400"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Product Form</label>
-                  <input
-                    type="text"
-                    value={newStockProduct}
-                    onChange={(e) => setNewStockProduct(e.target.value)}
-                    placeholder="e.g. Weld Neck Flanges, Equal Tees"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-muted-foreground">Size Range</label>
-                    <input
-                      type="text"
-                      value={newStockSize}
-                      onChange={(e) => setNewStockSize(e.target.value)}
-                      placeholder='e.g. 2" to 12"'
-                      className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-muted-foreground">Available Quantity</label>
-                    <input
-                      type="number"
-                      required
-                      value={newStockQty}
-                      onChange={(e) => setNewStockQty(e.target.value)}
-                      placeholder="e.g. 150"
-                      className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground">Material Specification</label>
-                  <input
-                    type="text"
-                    value={newStockSpec}
-                    onChange={(e) => setNewStockSpec(e.target.value)}
-                    placeholder="e.g. ASTM B564, NORSOK M-630 MDS D55"
-                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowStockModal(false)}
-                    className="rounded-sm border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={stockModalBusy}
-                    className="rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    {stockModalBusy ? "Saving..." : "Add to Stock"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: Customer Details 360-degree View */}
-        {selectedCustomer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto">
-            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-sm border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-border/80 px-6 py-4 bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-base border border-primary/40">
-                    {selectedCustomer.full_name?.charAt(0) || "C"}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-foreground">
-                        {selectedCustomer.full_name}
-                      </h3>
-                      <span
-                        className={`rounded-sm px-2 py-0.5 font-mono text-[9px] uppercase font-semibold ${
-                          selectedCustomer.status === "inactive"
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        }`}
-                      >
-                        {selectedCustomer.status || "active"}
-                      </span>
-                      <span
-                        className={`rounded-sm px-2 py-0.5 font-mono text-[9px] uppercase font-semibold ${
-                          selectedCustomer.login_method === "google"
-                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                            : "bg-primary/10 text-primary border border-primary/20"
-                        }`}
-                      >
-                        {selectedCustomer.login_method || "password"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                      <span>{selectedCustomer.email}</span>
-                      {selectedCustomer.company && (
-                        <>
-                          <span>•</span>
-                          <span>{selectedCustomer.company}</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditCustomer(selectedCustomer)}
-                    className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                    <span>Edit Contact</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCustomer(null)}
-                    className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Navigation Tabs */}
-              <div className="flex border-b border-border/80 px-6 bg-muted/15 overflow-x-auto text-xs font-medium">
-                {[
-                  { key: "info", label: "Customer Info" },
-                  { key: "rfqs", label: `RFQ Inquiries (${customerDetail?.rfqs?.length ?? selectedCustomer.rfq_count ?? 0})` },
-                  { key: "orders", label: `Purchases & Orders (${customerDetail?.orders?.length ?? selectedCustomer.orders_count ?? 0})` },
-                  { key: "products", label: `Cut-to-Size Requests (${customerDetail?.productRequests?.length ?? 0})` },
-                  { key: "materials", label: `Material Requests (${customerDetail?.materialRequests?.length ?? 0})` },
-                  { key: "logins", label: `Login History (${customerDetail?.loginHistory?.length ?? 0})` },
-                ].map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setCustomerDetailTab(t.key as any)}
-                    className={`px-3.5 py-2.5 border-b-2 font-medium whitespace-nowrap transition-colors ${
-                      customerDetailTab === t.key
-                        ? "border-primary text-primary font-semibold"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab Contents */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {customerDetailLoading ? (
-                  <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
-                    <RefreshCw className="h-5 w-5 animate-spin mr-2 text-primary" />
-                    Loading complete customer record from MySQL...
-                  </div>
-                ) : (
-                  <>
-                    {/* TAB 1: CUSTOMER INFO */}
-                    {customerDetailTab === "info" && (
-                      <div className="space-y-6">
-                        {/* 1. Basic Info Grid */}
-                        <div className="rounded-sm border border-border bg-background/50 p-4">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-3">
-                            Customer Profile Information
-                          </h4>
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Customer ID</span>
-                              <span className="font-mono text-[11px] text-foreground select-all">
-                                {customerDetail?.customer?.id || selectedCustomer.id}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Full Name</span>
-                              <span className="font-semibold text-foreground">
-                                {customerDetail?.customer?.full_name || selectedCustomer.full_name}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Work Email</span>
-                              <span className="font-mono text-[11px] text-foreground">
-                                {customerDetail?.customer?.email || selectedCustomer.email}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Phone / Mobile</span>
-                              {customerDetail?.customer?.phone || selectedCustomer.phone ? (
-                                <span className="font-mono text-[11px] font-semibold text-primary">
-                                  {customerDetail?.customer?.phone || selectedCustomer.phone}
-                                </span>
-                              ) : (
-                                <span className="text-[#EAEAEA] italic">Not Provided</span>
-                              )}
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Company / Organization</span>
-                              <span className="text-foreground">
-                                {customerDetail?.customer?.company || selectedCustomer.company || "Not Provided"}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Account Role</span>
-                              <span className="capitalize text-foreground">
-                                {customerDetail?.customer?.role || selectedCustomer.role || "Customer"}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Login Method</span>
-                              <span className="font-mono text-[11px] text-foreground">
-                                {selectedCustomer.login_method === "google" ? "Google OAuth 2.0" : "Password Authentication"}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Registered Date (IST)</span>
-                              <span className="font-mono text-[11px] text-foreground">
-                                {formatKolkataTime(customerDetail?.customer?.created_at || selectedCustomer.created_at)}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Last Login Activity (IST)</span>
-                              <span className="font-mono text-[11px] text-foreground">
-                                {formatKolkataTime(customerDetail?.customer?.last_login_at || selectedCustomer.last_login_at)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 2. Customer Activity KPI Cards */}
+              ) : (
+                <div className="mt-2 divide-y divide-border rounded-sm border border-border bg-muted/10">
+                  {customerHistory.map((q) => {
+                    const firstItem = q.items?.[0] || {};
+                    return (
+                      <div key={q.id} className="flex items-center justify-between p-3 text-xs">
                         <div>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-3">
-                            Customer Activity & Commercial Engagement
-                          </h4>
-                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                            <div className="rounded-sm border border-border bg-card p-3">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">RFQs</span>
-                              <p className="mt-1 font-mono text-xl font-bold text-primary">
-                                {customerDetail?.activityStats?.totalRfqs ?? selectedCustomer.rfq_count ?? 0}
-                              </p>
-                            </div>
-
-                            <div className="rounded-sm border border-border bg-card p-3">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Orders</span>
-                              <p className="mt-1 font-mono text-xl font-bold text-foreground">
-                                {customerDetail?.activityStats?.totalOrders ?? selectedCustomer.orders_count ?? 0}
-                              </p>
-                            </div>
-
-                            <div className="rounded-sm border border-border bg-card p-3">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Cut-to-Size</span>
-                              <p className="mt-1 font-mono text-xl font-bold text-foreground">
-                                {customerDetail?.activityStats?.totalProductRequests ?? 0}
-                              </p>
-                            </div>
-
-                            <div className="rounded-sm border border-border bg-card p-3">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Materials</span>
-                              <p className="mt-1 font-mono text-xl font-bold text-foreground">
-                                {customerDetail?.activityStats?.totalMaterialRequests ?? 0}
-                              </p>
-                            </div>
-
-                            <div className="rounded-sm border border-border bg-card p-3 col-span-2 sm:col-span-1">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Last Inquiry</span>
-                              <p className="mt-1 font-mono text-[10px] text-foreground truncate">
-                                {customerDetail?.activityStats?.lastInquiryDate
-                                  ? formatKolkataTime(customerDetail.activityStats.lastInquiryDate)
-                                  : "None"}
-                              </p>
-                            </div>
-
-                            <div className="rounded-sm border border-border bg-card p-3 col-span-2 sm:col-span-1">
-                              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Last Purchase</span>
-                              <p className="mt-1 font-mono text-[10px] text-foreground truncate">
-                                {customerDetail?.activityStats?.lastPurchaseDate
-                                  ? formatKolkataTime(customerDetail.activityStats.lastPurchaseDate)
-                                  : "None"}
-                              </p>
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-primary">{q.reference}</span>
+                            {getRfqStatusBadge(q.status)}
+                          </div>
+                          <div className="mt-0.5 text-muted-foreground">
+                            {firstItem.product || "Custom Metal Product"}{" "}
+                            {firstItem.material ? `(${firstItem.material})` : ""}
+                            {firstItem.quantity ? ` • ${firstItem.quantity} ${firstItem.unit || "pcs"}` : ""}
+                          </div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                            Submitted: {formatKolkataTime(q.created_at)}
                           </div>
                         </div>
+
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomer(null);
+                              setSelectedRfq(q);
+                            }}
+                            className="rounded border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                          >
+                            View RFQ
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingRfqId === q.id}
+                            onClick={() => handleDeleteRfq(q.id, q.reference)}
+                            className="rounded border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-400"
+                            title="Delete enquiry"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
-                    )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-                    {/* TAB 2: RFQ INQUIRIES */}
-                    {customerDetailTab === "rfqs" && (
-                      <div className="space-y-4">
-                        {!customerDetail?.rfqs || customerDetail.rfqs.length === 0 ? (
-                          <div className="py-8 text-center text-xs text-muted-foreground border border-border rounded-sm bg-background/50">
-                            No RFQ inquiries submitted yet by this customer.
-                          </div>
-                        ) : (
-                          customerDetail.rfqs.map((rfq: any) => (
-                            <div key={rfq.id} className="rounded-sm border border-border bg-background/50 p-4 space-y-3">
-                              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center border-b border-border/60 pb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-xs font-bold text-primary">
-                                    {rfq.reference}
-                                  </span>
-                                  <span className="rounded-sm bg-primary/10 border border-primary/20 px-2 py-0.5 font-mono text-[9px] uppercase font-semibold text-primary">
-                                    {rfq.status}
-                                  </span>
-                                </div>
-                                <span className="font-mono text-[10px] text-muted-foreground">
-                                  {formatKolkataTime(rfq.created_at)}
-                                </span>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">Project</span>
-                                  <span className="font-medium text-foreground">{rfq.project_name || "—"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">Incoterm</span>
-                                  <span className="font-medium text-foreground">{rfq.incoterm || "—"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">Delivery Port</span>
-                                  <span className="font-medium text-foreground">{rfq.delivery_port || "—"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">Target Lead Time</span>
-                                  <span className="font-medium text-foreground">{rfq.target_lead_time || "—"}</span>
-                                </div>
-                              </div>
-
-                              {rfq.message && (
-                                <p className="text-xs text-muted-foreground bg-muted/20 p-2 rounded-sm border border-border/40">
-                                  <span className="font-semibold text-foreground">Message: </span>
-                                  {rfq.message}
-                                </p>
-                              )}
-
-                              {/* RFQ Line Items */}
-                              {rfq.items && rfq.items.length > 0 && (
-                                <div className="overflow-x-auto rounded-sm border border-border/60">
-                                  <table className="w-full text-left text-[11px]">
-                                    <thead className="border-b border-border/60 bg-muted/40 font-mono text-[9px] uppercase text-muted-foreground">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Product</th>
-                                        <th className="px-3 py-1.5">Grade</th>
-                                        <th className="px-3 py-1.5">Size / Class</th>
-                                        <th className="px-3 py-1.5 text-right">Quantity</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/40">
-                                      {rfq.items.map((it: any, idx: number) => (
-                                        <tr key={idx}>
-                                          <td className="px-3 py-1.5 font-medium text-foreground">
-                                            {it.product || it.product_name || "Alloy Component"}
-                                          </td>
-                                          <td className="px-3 py-1.5 font-mono text-primary">
-                                            {it.material || it.grade || "—"}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-muted-foreground">
-                                            {it.size || it.rating || "—"}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-right font-mono text-foreground">
-                                            {it.quantity} {it.unit || "pcs"}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-
-                    {/* TAB 3: PURCHASES & ORDERS */}
-                    {customerDetailTab === "orders" && (
-                      <div className="space-y-4">
-                        {!customerDetail?.orders || customerDetail.orders.length === 0 ? (
-                          <div className="py-8 text-center text-xs text-muted-foreground border border-border rounded-sm bg-background/50">
-                            No recorded purchase orders for this customer yet.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto rounded-sm border border-border">
-                            <table className="w-full text-left text-xs">
-                              <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                                <tr>
-                                  <th className="px-3 py-2.5">Order Number</th>
-                                  <th className="px-3 py-2.5">Title / Items</th>
-                                  <th className="px-3 py-2.5">Amount</th>
-                                  <th className="px-3 py-2.5">Tracking Number</th>
-                                  <th className="px-3 py-2.5">Status</th>
-                                  <th className="px-3 py-2.5">Order Date</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/60">
-                                {customerDetail.orders.map((ord: any) => (
-                                  <tr key={ord.id} className="hover:bg-muted/20">
-                                    <td className="px-3 py-2.5 font-mono text-primary font-bold">
-                                      {ord.order_number}
-                                    </td>
-                                    <td className="px-3 py-2.5 font-medium text-foreground">
-                                      {ord.title}
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-foreground font-semibold">
-                                      {ord.currency} {Number(ord.total_amount).toLocaleString("en-IN")}
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-muted-foreground">
-                                      {ord.tracking_number || "—"}
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className="rounded-sm bg-primary/10 border border-primary/20 px-1.5 py-0.5 font-mono text-[9px] uppercase font-semibold text-primary">
-                                        {ord.status}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground">
-                                      {formatKolkataTime(ord.created_at)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* TAB 4: PRODUCT REQUESTS */}
-                    {customerDetailTab === "products" && (
-                      <div className="space-y-4">
-                        {!customerDetail?.productRequests || customerDetail.productRequests.length === 0 ? (
-                          <div className="py-8 text-center text-xs text-muted-foreground border border-border rounded-sm bg-background/50">
-                            No cut-to-size product requests on record.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto rounded-sm border border-border">
-                            <table className="w-full text-left text-xs">
-                              <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                                <tr>
-                                  <th className="px-3 py-2.5">Product Name</th>
-                                  <th className="px-3 py-2.5">Material</th>
-                                  <th className="px-3 py-2.5">Size</th>
-                                  <th className="px-3 py-2.5">Quantity</th>
-                                  <th className="px-3 py-2.5">Quotation</th>
-                                  <th className="px-3 py-2.5">Status</th>
-                                  <th className="px-3 py-2.5">Date</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/60">
-                                {customerDetail.productRequests.map((pr: any) => (
-                                  <tr key={pr.id}>
-                                    <td className="px-3 py-2.5 font-semibold text-foreground">{pr.product_name}</td>
-                                    <td className="px-3 py-2.5 font-mono text-primary">{pr.material || "—"}</td>
-                                    <td className="px-3 py-2.5 text-muted-foreground">{pr.size || "—"}</td>
-                                    <td className="px-3 py-2.5 font-mono text-foreground">{pr.quantity}</td>
-                                    <td className="px-3 py-2.5 font-mono text-foreground font-semibold">
-                                      {pr.quotation_amount ? `INR ${Number(pr.quotation_amount).toLocaleString("en-IN")}` : "Pending"}
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase">
-                                        {pr.status}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground">
-                                      {formatKolkataTime(pr.created_at)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* TAB 5: MATERIAL REQUESTS */}
-                    {customerDetailTab === "materials" && (
-                      <div className="space-y-4">
-                        {!customerDetail?.materialRequests || customerDetail.materialRequests.length === 0 ? (
-                          <div className="py-8 text-center text-xs text-muted-foreground border border-border rounded-sm bg-background/50">
-                            No raw material inquiries on record.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto rounded-sm border border-border">
-                            <table className="w-full text-left text-xs">
-                              <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                                <tr>
-                                  <th className="px-3 py-2.5">Material Name</th>
-                                  <th className="px-3 py-2.5">Form</th>
-                                  <th className="px-3 py-2.5">Quantity</th>
-                                  <th className="px-3 py-2.5">Status</th>
-                                  <th className="px-3 py-2.5">Date</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/60">
-                                {customerDetail.materialRequests.map((mr: any) => (
-                                  <tr key={mr.id}>
-                                    <td className="px-3 py-2.5 font-semibold text-foreground">{mr.material_name}</td>
-                                    <td className="px-3 py-2.5 text-muted-foreground">{mr.form || "—"}</td>
-                                    <td className="px-3 py-2.5 font-mono text-foreground">{mr.quantity}</td>
-                                    <td className="px-3 py-2.5">
-                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase">
-                                        {mr.status}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground">
-                                      {formatKolkataTime(mr.created_at)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* TAB 6: LOGIN HISTORY */}
-                    {customerDetailTab === "logins" && (
-                      <div className="space-y-4">
-                        {!customerDetail?.loginHistory || customerDetail.loginHistory.length === 0 ? (
-                          <div className="py-8 text-center text-xs text-muted-foreground border border-border rounded-sm bg-background/50">
-                            No login audit logs available.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto rounded-sm border border-border">
-                            <table className="w-full text-left text-xs">
-                              <thead className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
-                                <tr>
-                                  <th className="px-3 py-2.5">Login Timestamp (Asia/Kolkata)</th>
-                                  <th className="px-3 py-2.5">Method</th>
-                                  <th className="px-3 py-2.5">IP Address</th>
-                                  <th className="px-3 py-2.5">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/60">
-                                {customerDetail.loginHistory.map((lh: any) => (
-                                  <tr key={lh.id}>
-                                    <td className="px-3 py-2.5 font-mono text-primary font-medium">
-                                      {formatKolkataTime(lh.created_at)}
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span
-                                        className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase ${
-                                          lh.login_method === "google"
-                                            ? "bg-blue-500/10 text-blue-400"
-                                            : "bg-primary/10 text-primary"
-                                        }`}
-                                      >
-                                        {lh.login_method}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-muted-foreground">
-                                      {lh.ip_address || "127.0.0.1"}
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className="rounded-sm bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 font-mono text-[9px] uppercase">
-                                        {lh.status || "success"}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+            <div className="mt-6 flex justify-end border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                Close
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      ) : null}
 
-        {/* Modal: Edit Customer Contact */}
-        {editingCustomer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-sm border border-border bg-card p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between pb-3 border-b border-border">
-                <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    Edit Customer Contact
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Modify profile & status stored in MySQL `users` table
-                  </p>
-                </div>
+      {/* ======================================================== */}
+      {/* EDIT CUSTOMER CONTACT MODAL                              */}
+      {/* ======================================================== */}
+      {editingCustomer ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-md border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-border pb-4">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Edit Customer Contact</h3>
+                <p className="font-mono text-xs text-muted-foreground">{editingCustomer.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {editError ? (
+              <div className="mt-4 flex items-center gap-2 rounded-sm border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSaveCustomer} className="mt-4 space-y-4">
+              <div>
+                <label className="font-mono text-xs uppercase text-muted-foreground">Customer Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-xs uppercase text-muted-foreground">Work Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-xs uppercase text-muted-foreground">Phone / Mobile Number</label>
+                <input
+                  type="text"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="+91 98200 12345"
+                  className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-xs uppercase text-muted-foreground">Company / Organization</label>
+                <input
+                  type="text"
+                  value={editCompany}
+                  onChange={(e) => setEditCompany(e.target.value)}
+                  className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-xs uppercase text-muted-foreground">Account Status</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as "active" | "inactive")}
+                  className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setEditingCustomer(null)}
-                  className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="rounded-sm border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-muted"
                 >
-                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editBusy}
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {editBusy ? "Saving…" : "Save Contact Info"}
                 </button>
               </div>
-
-              {editError && (
-                <div className="mt-4 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-                  {editError}
-                </div>
-              )}
-
-              <form onSubmit={handleSaveCustomerEdit} className="mt-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Customer Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Work Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Phone / Mobile Number (with Country Code)
-                  </label>
-                  <input
-                    type="tel"
-                    value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    placeholder="+91 98200 12345"
-                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary"
-                  />
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    Include country code (e.g. +91 for India, +1 for USA/Canada, +44 for UK).
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Company / Organization
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompany}
-                    onChange={(e) => setEditCompany(e.target.value)}
-                    placeholder="e.g. Singhania EPC Ltd"
-                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Account Status
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as "active" | "inactive")}
-                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="active">Active (Access Allowed)</option>
-                    <option value="inactive">Inactive (Suspended)</option>
-                  </select>
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-4 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setEditingCustomer(null)}
-                    className="rounded-sm border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editBusy}
-                    className="rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50"
-                  >
-                    {editBusy ? "Saving Changes..." : "Save Changes"}
-                  </button>
-                </div>
-              </form>
-            </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+export default AdminConsolePage;

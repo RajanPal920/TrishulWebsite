@@ -379,10 +379,16 @@ export const api = {
     async getRfq(id: string): Promise<{ rfq: RfqInquiryItem }> {
       return request<{ rfq: RfqInquiryItem }>(`/api/customer/rfqs/${id}`);
     },
+
+    async deleteRfq(id: string): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>(`/api/customer/rfqs/${id}`, {
+        method: 'DELETE',
+      });
+    },
   },
 
   admin: {
-    async getOverview(): Promise<{ stats: any; recentUsers: any[]; recentRequests: any[] }> {
+    async getOverview(): Promise<{ stats: any; recentUsers: any[]; recentRequests: any[]; recentRfqs?: any[] }> {
       return request('/api/admin/overview');
     },
 
@@ -517,6 +523,40 @@ export const api = {
 
     async getActivityLogs(): Promise<{ logs: any[] }> {
       return request('/api/admin/activity-logs');
+    },
+
+    async getRfqs(query?: { search?: string; status?: string }): Promise<{ rfqs: RfqInquiryItem[] }> {
+      const p = new URLSearchParams();
+      if (query?.search) p.set('search', query.search);
+      if (query?.status && query.status !== 'all') p.set('status', query.status);
+      const url = `/api/admin/rfqs${p.toString() ? `?${p.toString()}` : ''}`;
+      return request<{ rfqs: RfqInquiryItem[] }>(url);
+    },
+
+    async updateRfqStatus(
+      id: string,
+      data: { status: string; notes?: string }
+    ): Promise<{ success: boolean; message: string; rfq: any }> {
+      return request<{ success: boolean; message: string; rfq: any }>(`/api/admin/rfqs/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async deleteRfq(id: string): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>(`/api/admin/rfqs/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    async changePassword(data: {
+      currentPassword?: string;
+      newPassword: string;
+    }): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>('/api/admin/password', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
     },
   },
 

@@ -35,7 +35,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 const fieldClass =
-  "motion-field mt-2 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-[#EAEAEA] focus:border-primary focus:bg-background";
+  "motion-field mt-2 w-full rounded-sm border border-border bg-card/60 px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-zinc-400 focus:border-primary focus:bg-background";
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -83,8 +83,11 @@ function AuthPage() {
 
     try {
       await login(email, password);
+      setEmail("");
+      setPassword("");
       void navigate({ to: targetUrl });
     } catch (err: any) {
+      setPassword("");
       setError(err?.message || "Invalid work email or password.");
     } finally {
       setBusy(false);
@@ -136,8 +139,12 @@ function AuthPage() {
         password,
         confirmPassword,
       });
+      setPassword("");
+      setConfirmPassword("");
       void navigate({ to: targetUrl });
     } catch (err: any) {
+      setPassword("");
+      setConfirmPassword("");
       setError(err?.message || "Registration failed. Please check your information.");
     } finally {
       setBusy(false);
@@ -220,7 +227,7 @@ function AuthPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="Enter work email"
                   className={fieldClass}
                   autoComplete="email"
                 />
@@ -235,7 +242,7 @@ function AuthPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your account password"
+                  placeholder="Enter password"
                   className={fieldClass}
                   autoComplete="current-password"
                 />
@@ -270,7 +277,7 @@ function AuthPage() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Rajesh Sharma"
+                  placeholder="Enter your name"
                   className={fieldClass}
                   autoComplete="name"
                 />
@@ -284,7 +291,7 @@ function AuthPage() {
                   type="text"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Apex Engineering Ltd"
+                  placeholder="Enter company name"
                   className={fieldClass}
                   autoComplete="organization"
                 />
@@ -299,7 +306,7 @@ function AuthPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="Enter work email"
                   className={fieldClass}
                   autoComplete="email"
                 />
@@ -313,7 +320,7 @@ function AuthPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
+                  placeholder="Enter phone number"
                   className={fieldClass}
                   autoComplete="tel"
                 />
@@ -329,7 +336,7 @@ function AuthPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create a secure password"
+                  placeholder="Enter password (min 8 characters)"
                   className={fieldClass}
                   autoComplete="new-password"
                 />
@@ -345,7 +352,7 @@ function AuthPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat your password"
+                  placeholder="Confirm password"
                   className={fieldClass}
                   autoComplete="new-password"
                 />
@@ -412,7 +419,7 @@ function AuthPage() {
                     type="email"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="name@company.com"
+                    placeholder="Enter work email"
                     className={fieldClass}
                   />
                 </div>

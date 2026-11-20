@@ -79,10 +79,10 @@
   --primary-glow: oklch(0.81 0.088 87);
 
   --secondary: oklch(0.26 0.016 255);
-  --secondary-foreground: #F5F5F5;
+  --secondary-foreground: #d1d5db;
 
   --muted: oklch(0.25 0.014 255);
-  --muted-foreground: #F5F5F5;
+  --muted-foreground: #9ca3af;
 
   --accent: oklch(0.28 0.02 255);
   --accent-foreground: oklch(0.9 0.05 85);
@@ -132,8 +132,8 @@
   --surface-foreground: #FFFFFF;
   --card-foreground: #FFFFFF;
   --popover-foreground: #FFFFFF;
-  --secondary-foreground: #F5F5F5;
-  --muted-foreground: #F5F5F5;
+  --secondary-foreground: #d1d5db;
+  --muted-foreground: #9ca3af;
   --steel: #EAEAEA;
   --sidebar-foreground: #FFFFFF;
   --sidebar-accent-foreground: #FFFFFF;
@@ -142,6 +142,13 @@
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  input::placeholder,
+  textarea::placeholder,
+  select::placeholder {
+    color: #9ca3af !important;
+    opacity: 0.85 !important;
   }
 
   html {

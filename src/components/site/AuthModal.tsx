@@ -35,8 +35,11 @@ export function AuthModal() {
     setBusy(true);
     try {
       await login(email, password);
+      setEmail("");
+      setPassword("");
       onSuccess();
     } catch (err: any) {
+      setPassword("");
       setError(err?.message || "Invalid work email or password.");
     } finally {
       setBusy(false);
@@ -86,8 +89,12 @@ export function AuthModal() {
         company,
         phone,
       });
+      setPassword("");
+      setConfirmPassword("");
       onSuccess();
     } catch (err: any) {
+      setPassword("");
+      setConfirmPassword("");
       setError(err?.message || "Registration failed. Please check your information.");
     } finally {
       setBusy(false);
@@ -170,8 +177,8 @@ export function AuthModal() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Enter work email"
+                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
             </div>
@@ -185,8 +192,8 @@ export function AuthModal() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Enter password"
+                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
             </div>
@@ -211,8 +218,8 @@ export function AuthModal() {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Rajan Pal"
-                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Enter your name"
+                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
             </div>
@@ -227,8 +234,8 @@ export function AuthModal() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@company.com"
-                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    placeholder="Enter work email"
+                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                   />
                 </div>
               </div>
@@ -241,8 +248,8 @@ export function AuthModal() {
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98200 12345"
-                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    placeholder="Enter phone number"
+                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                   />
                 </div>
               </div>
@@ -256,8 +263,8 @@ export function AuthModal() {
                   type="text"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Trishul Engineering Pvt Ltd"
-                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Enter company name"
+                  className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
             </div>
@@ -273,8 +280,8 @@ export function AuthModal() {
                     minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    placeholder="Enter password (min 8)"
+                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                   />
                 </div>
               </div>
@@ -289,8 +296,8 @@ export function AuthModal() {
                     minLength={8}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                    placeholder="Confirm password"
+                    className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                   />
                 </div>
               </div>

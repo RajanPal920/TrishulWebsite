@@ -626,4 +626,34 @@ router.get('/rfqs/:id', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/customer/rfqs/:id
+ * Customer deletes an inquiry
+ */
+router.delete('/rfqs/:id', async (req, res) => {
+  try {
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+    const existing = await get(
+      `SELECT id, reference FROM rfq_requests
+       WHERE (id = ? OR reference = ?) AND (user_id = ? OR (user_id IS NULL AND LOWER(email) = ?))`,
+      [req.params.id, req.params.id, req.user.id, userEmail]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Inquiry not found or access denied.' });
+    }
+
+    await run('DELETE FROM rfq_requests WHERE id = ?', [existing.id]);
+
+    return res.json({
+      success: true,
+      message: 'Inquiry deleted successfully.',
+      reference: existing.reference,
+    });
+  } catch (err) {
+    console.error('[Customer Delete RFQ Error]:', err);
+    return res.status(500).json({ error: 'Failed to delete inquiry.' });
+  }
+});
+
 export default router;

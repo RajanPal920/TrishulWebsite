@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { get, all, run } from '../db/connection.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 
@@ -31,8 +32,21 @@ async function logAdminAction(admin, action, targetType, targetId = null, detail
  */
 router.get('/overview', async (req, res) => {
   try {
-    const [custStats, prodStats, matStats, inqStats, orderStats, recentUsers, recentRequests] = await Promise.all([
+    const [
+      custStats,
+      rfqCountRow,
+      pendingRfqRow,
+      prodStats,
+      matStats,
+      inqStats,
+      orderStats,
+      recentUsers,
+      recentRequests,
+      recentRfqs,
+    ] = await Promise.all([
       get("SELECT count(*) as total FROM users WHERE role = 'customer'"),
+      get("SELECT count(*) as total FROM rfq_requests"),
+      get("SELECT count(*) as total FROM rfq_requests WHERE LOWER(status) IN ('new', 'submitted', 'pending review')"),
       get(`SELECT
              count(*) as total,
              SUM(CASE WHEN status = 'Pending Review' THEN 1 ELSE 0 END) as pending,
@@ -53,8 +67,9 @@ router.get('/overview', async (req, res) => {
              SUM(COALESCE(total_amount, 0)) as total_order_val
            FROM orders`),
       all(
-        `SELECT id, full_name, email, company, role, login_method, last_login_at, created_at
+        `SELECT id, full_name, email, company, phone, role, login_method, status, last_login_at, created_at
          FROM users
+         WHERE role = 'customer'
          ORDER BY created_at DESC LIMIT 5`
       ),
       all(
@@ -63,11 +78,23 @@ router.get('/overview', async (req, res) => {
          JOIN users u ON u.id = pr.user_id
          ORDER BY pr.created_at DESC LIMIT 5`
       ),
+      all(
+        `SELECT id, reference, company, contact_name, email, phone, items, message, status, created_at
+         FROM rfq_requests
+         ORDER BY created_at DESC LIMIT 6`
+      ),
     ]);
+
+    const parsedRecentRfqs = (recentRfqs || []).map((r) => ({
+      ...r,
+      items: typeof r.items === 'string' ? JSON.parse(r.items || '[]') : (r.items || []),
+    }));
 
     return res.json({
       stats: {
         totalCustomers: custStats?.total || 0,
+        totalRfqs: rfqCountRow?.total || 0,
+        pendingRfqs: pendingRfqRow?.total || 0,
         productRequests: {
           total: prodStats?.total || 0,
           pending: prodStats?.pending || 0,
@@ -90,10 +117,145 @@ router.get('/overview', async (req, res) => {
       },
       recentUsers: recentUsers || [],
       recentRequests: recentRequests || [],
+      recentRfqs: parsedRecentRfqs,
     });
   } catch (err) {
     console.error('[Admin Overview Error]:', err);
     return res.status(500).json({ error: 'Failed to retrieve admin overview statistics.' });
+  }
+});
+
+/**
+ * GET /api/admin/rfqs
+ * Complete list of customer queries & RFQ requests with full search and status filter
+ */
+router.get('/rfqs', async (req, res) => {
+  try {
+    const { status, search } = req.query;
+    let sql = 'SELECT * FROM rfq_requests WHERE 1=1';
+    const params = [];
+
+    if (status && status !== 'all') {
+      const clean = status.trim().toLowerCase();
+      if (clean === 'new') {
+        sql += " AND (LOWER(status) = 'new' OR LOWER(status) = 'submitted' OR LOWER(status) = 'pending review')";
+      } else {
+        sql += ' AND LOWER(status) = ?';
+        params.push(clean);
+      }
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      sql += ' AND (reference LIKE ? OR contact_name LIKE ? OR email LIKE ? OR company LIKE ? OR phone LIKE ?)';
+      params.push(term, term, term, term, term);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    const rfqs = await all(sql, params);
+    const parsed = (rfqs || []).map((r) => ({
+      ...r,
+      items: typeof r.items === 'string' ? JSON.parse(r.items || '[]') : (r.items || []),
+      testing: typeof r.testing === 'string' ? JSON.parse(r.testing || '[]') : (r.testing || []),
+      attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments || '[]') : (r.attachments || []),
+    }));
+
+    return res.json({ rfqs: parsed });
+  } catch (err) {
+    console.error('[Admin RFQs Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve RFQ queries.' });
+  }
+});
+
+/**
+ * PUT /api/admin/rfqs/:id
+ * Update status of an RFQ query
+ */
+router.put('/rfqs/:id', async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    const now = new Date().toISOString();
+
+    await run(
+      `UPDATE rfq_requests
+       SET status = COALESCE(?, status)
+       WHERE id = ? OR reference = ?`,
+      [status || null, req.params.id, req.params.id]
+    );
+
+    await logAdminAction(req.user, 'UPDATE_RFQ_STATUS', 'rfq_requests', req.params.id, `Status set to ${status}`, req);
+
+    const updated = await get('SELECT * FROM rfq_requests WHERE id = ? OR reference = ?', [req.params.id, req.params.id]);
+    return res.json({ success: true, message: 'Query status updated successfully.', rfq: updated });
+  } catch (err) {
+    console.error('[Admin RFQ Status Error]:', err);
+    return res.status(500).json({ error: 'Failed to update RFQ status.' });
+  }
+});
+
+/**
+ * DELETE /api/admin/rfqs/:id
+ * Admin deletes an RFQ enquiry
+ */
+router.delete('/rfqs/:id', async (req, res) => {
+  try {
+    const existing = await get(
+      'SELECT id, reference FROM rfq_requests WHERE id = ? OR reference = ?',
+      [req.params.id, req.params.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Inquiry not found.' });
+    }
+
+    await run('DELETE FROM rfq_requests WHERE id = ?', [existing.id]);
+    await logAdminAction(req.user, 'DELETE_RFQ', 'rfq_requests', existing.id, `Deleted RFQ ${existing.reference}`, req);
+
+    return res.json({
+      success: true,
+      message: 'Inquiry deleted successfully.',
+      reference: existing.reference,
+    });
+  } catch (err) {
+    console.error('[Admin Delete RFQ Error]:', err);
+    return res.status(500).json({ error: 'Failed to delete RFQ inquiry.' });
+  }
+});
+
+/**
+ * PUT /api/admin/password
+ * Change owner admin password
+ */
+router.put('/password', async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+    }
+
+    const admin = await get('SELECT * FROM users WHERE id = ? AND role = ?', [req.user.id, 'admin']);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin account not found.' });
+    }
+
+    if (admin.password_hash && currentPassword) {
+      const match = await bcrypt.compare(currentPassword, admin.password_hash);
+      if (!match) {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    const now = new Date().toISOString();
+
+    await run('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [newHash, now, admin.id]);
+    await logAdminAction(req.user, 'CHANGE_PASSWORD', 'users', admin.id, 'Admin password changed', req);
+
+    return res.json({ success: true, message: 'Admin password updated successfully.' });
+  } catch (err) {
+    console.error('[Admin Password Change Error]:', err);
+    return res.status(500).json({ error: 'Failed to change admin password.' });
   }
 });
 

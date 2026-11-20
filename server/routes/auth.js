@@ -118,17 +118,26 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const cleanEmail = (email || '').trim().toLowerCase();
+    const rawEmail = (email || '').trim().toLowerCase();
 
-    if (!cleanEmail || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    if (!rawEmail || !password) {
+      return res.status(400).json({ error: 'Email / Username and password are required.' });
     }
 
-    const user = await get(
+    const cleanEmail = rawEmail === 'admin' ? 'admin@trishulmetal.com' : rawEmail;
+
+    let user = await get(
       `SELECT id, email, password_hash, full_name, company, phone, role, avatar_url, created_at
        FROM users WHERE email = ?`,
       [cleanEmail]
     );
+
+    if (!user && rawEmail === 'admin') {
+      user = await get(
+        `SELECT id, email, password_hash, full_name, company, phone, role, avatar_url, created_at
+         FROM users WHERE role = 'admin' LIMIT 1`
+      );
+    }
 
     if (!user || !user.password_hash) {
       return res.status(401).json({ error: 'Invalid work email or password.' });
