@@ -67,12 +67,23 @@ app.use('/api/admin', adminRoutes);
 app.use('/api', publicRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    database: 'SQLite (trishul.db)',
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const { getActiveEngine, get } = await import('./db/connection.js');
+    const userCount = await get('SELECT count(*) as count FROM users');
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      engine: getActiveEngine(),
+      usersCount: userCount ? userCount.count : 0,
+    });
+  } catch (err) {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      error: err.message,
+    });
+  }
 });
 
 // Global error handler

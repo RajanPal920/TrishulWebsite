@@ -8,75 +8,180 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
-const DB_DIR = path.resolve(__dirname, '../data');
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+// Candidate database paths across local development, build, and Vercel serverless lambda
+const CANDIDATE_DB_PATHS = [
+  process.env.DATABASE_PATH ? path.resolve(process.env.DATABASE_PATH) : null,
+  '/tmp/trishul.db',
+  path.resolve(__dirname, '../data/trishul.db'),
+  path.resolve(process.cwd(), 'server/data/trishul.db'),
+  path.resolve(__dirname, '../../server/data/trishul.db'),
+].filter(Boolean);
 
-const DB_PATH = path.join(DB_DIR, 'trishul.db');
-
-// SQLite connection (fallback & local development) - wrapped in try/catch to prevent native binary dlopen crashes on environments with incompatible GLIBC
-let sqliteDb = null;
-try {
-  const sqlite3 = require('sqlite3');
-  if (sqlite3 && sqlite3.Database) {
-    sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        console.warn('[DB Notice] SQLite fallback initialization:', err.message);
-      } else {
-        sqliteDb.run('PRAGMA foreign_keys = ON;');
-        sqliteDb.run('PRAGMA journal_mode = WAL;');
+function findExistingDbFile() {
+  for (const p of CANDIDATE_DB_PATHS) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).size > 0) {
+        return p;
       }
-    });
+    } catch {}
   }
-} catch (sqliteLoadErr) {
-  console.warn('[DB Notice] SQLite native driver not available on this environment (will use MySQL):', sqliteLoadErr.message);
+  return path.resolve(__dirname, '../data/trishul.db');
 }
 
-export { sqliteDb };
+const DB_PATH = findExistingDbFile();
 
-// MySQL connection pool (Primary production engine)
+// Engine state: 'mysql' | 'sqlite' | 'sqljs'
+let activeEngine = 'sqlite';
 let mysqlPool = null;
-let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
+let sqliteDb = null;
+let sqlJsDb = null;
 let connectionPromise = null;
 
+// ============================================================================
+// 1. PRIMARY ENGINE: MySQL Connection Pool with Cloud URL & SSL Support
+// ============================================================================
+const connectionUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_DATABASE_URL;
+
+const hasExplicitMySQL =
+  Boolean(connectionUrl) ||
+  Boolean(process.env.DB_HOST && process.env.DB_HOST !== '127.0.0.1' && process.env.DB_HOST !== 'localhost');
+
 try {
-  const host = process.env.DB_HOST || '127.0.0.1';
-  const port = parseInt(process.env.DB_PORT || '3306', 10);
-  const user = process.env.DB_USER || 'root';
-  const password = process.env.DB_PASSWORD || '';
-  const database = process.env.DB_NAME || 'trishul_db';
+  let poolConfig;
+  if (connectionUrl) {
+    poolConfig = { uri: connectionUrl };
+  } else {
+    const host = process.env.DB_HOST || '127.0.0.1';
+    const port = parseInt(process.env.DB_PORT || '3306', 10);
+    const user = process.env.DB_USER || 'root';
+    const password = process.env.DB_PASSWORD || '';
+    const database = process.env.DB_NAME || 'trishul_db';
+    poolConfig = { host, port, user, password, database };
+  }
 
-  mysqlPool = mysql.createPool({
-    host,
-    port,
-    user,
-    password,
-    database,
-    waitForConnections: true,
-    connectionLimit: 15,
-    queueLimit: 0,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
-  });
+  poolConfig.waitForConnections = true;
+  poolConfig.connectionLimit = 15;
+  poolConfig.queueLimit = 0;
+  poolConfig.enableKeepAlive = true;
+  poolConfig.keepAliveInitialDelay = 0;
 
-  // Test MySQL connection eagerly
-  connectionPromise = mysqlPool.getConnection()
+  // For remote cloud MySQL (e.g. Aiven, PlanetScale, TiDB, Supabase, CleverCloud), enable SSL
+  const isLocal =
+    (!connectionUrl && (poolConfig.host === '127.0.0.1' || poolConfig.host === 'localhost')) ||
+    (connectionUrl && (connectionUrl.includes('127.0.0.1') || connectionUrl.includes('localhost')));
+
+  if (!isLocal) {
+    poolConfig.ssl = { rejectUnauthorized: false };
+  }
+
+  mysqlPool = mysql.createPool(poolConfig);
+
+  // Eager connection test
+  connectionPromise = mysqlPool
+    .getConnection()
     .then((conn) => {
       activeEngine = 'mysql';
-      console.log(`[DB] Successfully connected to MySQL database: ${database} at ${host}:${port}`);
+      console.log(`[DB] Successfully connected to MySQL database engine.`);
       conn.release();
       return true;
     })
     .catch((err) => {
       activeEngine = 'sqlite';
-      console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly running on SQLite engine.`);
+      console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly initializing SQLite engine.`);
       return false;
     });
 } catch (poolErr) {
   activeEngine = 'sqlite';
   console.warn('[DB Notice] MySQL pool initialization notice:', poolErr.message);
 }
+
+// ============================================================================
+// 2. SECONDARY ENGINE: Native SQLite Driver (Local Development / Server)
+// ============================================================================
+try {
+  const sqlite3 = require('sqlite3');
+  if (sqlite3 && sqlite3.Database) {
+    sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
+      if (err) {
+        console.warn('[DB Notice] Native SQLite initialization warning:', err.message);
+      } else {
+        sqliteDb.run('PRAGMA foreign_keys = ON;');
+      }
+    });
+  }
+} catch (sqliteLoadErr) {
+  console.warn('[DB Notice] Native sqlite3 binary not available in this environment. Falling back to universal WebAssembly sql.js engine.');
+}
+
+// ============================================================================
+// 3. TERTIARY ENGINE: Universal WebAssembly SQLite (sql.js) for Vercel Serverless
+// ============================================================================
+let sqlJsInitPromise = null;
+
+async function getSqlJsEngine() {
+  if (sqlJsDb) return sqlJsDb;
+  if (sqlJsInitPromise) return sqlJsInitPromise;
+
+  sqlJsInitPromise = (async () => {
+    try {
+      const initSqlJs = require('sql.js');
+      const SQL = await initSqlJs({
+        locateFile: (file) => {
+          const candidatePaths = [
+            path.resolve(process.cwd(), 'node_modules/sql.js/dist', file),
+            path.resolve(__dirname, '../../node_modules/sql.js/dist', file),
+            path.resolve(__dirname, '../node_modules/sql.js/dist', file),
+          ];
+          for (const p of candidatePaths) {
+            try {
+              if (fs.existsSync(p)) return p;
+            } catch {}
+          }
+          return file;
+        },
+      });
+
+      // Find best file to load initial bytes from
+      const dbFileToLoad = findExistingDbFile();
+      let fileBuffer = null;
+      try {
+        if (fs.existsSync(dbFileToLoad)) {
+          fileBuffer = fs.readFileSync(dbFileToLoad);
+        }
+      } catch (readErr) {
+        console.warn('[sql.js] Notice reading db file:', readErr.message);
+      }
+
+      sqlJsDb = fileBuffer ? new SQL.Database(fileBuffer) : new SQL.Database();
+      console.log(`[DB] Universal sql.js (WebAssembly) initialized successfully from ${dbFileToLoad || 'memory'}.`);
+      return sqlJsDb;
+    } catch (wasmErr) {
+      console.error('[DB] Failed to initialize sql.js:', wasmErr.message);
+      return null;
+    }
+  })();
+
+  return sqlJsInitPromise;
+}
+
+// Persist sql.js mutations to disk (/tmp/trishul.db and original DB_PATH if writable)
+function persistSqlJs(dbInstance) {
+  if (!dbInstance) return;
+  try {
+    const data = dbInstance.export();
+    const buf = Buffer.from(data);
+    try {
+      fs.writeFileSync('/tmp/trishul.db', buf);
+    } catch {}
+    try {
+      if (DB_PATH && !DB_PATH.startsWith('/tmp')) {
+        fs.writeFileSync(DB_PATH, buf);
+      }
+    } catch {}
+  } catch {}
+}
+
+export { sqliteDb };
 
 function normalizeParamsForMySQL(params) {
   if (!Array.isArray(params)) return params;
@@ -97,12 +202,13 @@ function normalizeParamsForMySQL(params) {
  */
 export async function all(sql, params = []) {
   if (connectionPromise) await connectionPromise;
+
+  // 1. MySQL
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
       return rows;
     } catch (err) {
-      // If error is MySQL-specific or lost connection, fallback to SQLite
       if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
         activeEngine = 'sqlite';
         return all(sql, params);
@@ -111,15 +217,35 @@ export async function all(sql, params = []) {
     }
   }
 
-  return new Promise((resolve, reject) => {
-    if (!sqliteDb) {
-      return resolve([]);
-    }
-    sqliteDb.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows || []);
+  // 2. Native SQLite
+  if (sqliteDb) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
     });
-  });
+  }
+
+  // 3. Universal WebAssembly SQLite (sql.js)
+  const wasmDb = await getSqlJsEngine();
+  if (wasmDb) {
+    try {
+      const stmt = wasmDb.prepare(sql);
+      stmt.bind(params);
+      const rows = [];
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+      stmt.free();
+      return rows;
+    } catch (err) {
+      console.warn('[sql.js all error]:', err.message);
+      return [];
+    }
+  }
+
+  return [];
 }
 
 /**
@@ -127,6 +253,8 @@ export async function all(sql, params = []) {
  */
 export async function get(sql, params = []) {
   if (connectionPromise) await connectionPromise;
+
+  // 1. MySQL
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
@@ -140,15 +268,32 @@ export async function get(sql, params = []) {
     }
   }
 
-  return new Promise((resolve, reject) => {
-    if (!sqliteDb) {
-      return resolve(null);
-    }
-    sqliteDb.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row || null);
+  // 2. Native SQLite
+  if (sqliteDb) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row || null);
+      });
     });
-  });
+  }
+
+  // 3. Universal WebAssembly SQLite (sql.js)
+  const wasmDb = await getSqlJsEngine();
+  if (wasmDb) {
+    try {
+      const stmt = wasmDb.prepare(sql);
+      stmt.bind(params);
+      const row = stmt.step() ? stmt.getAsObject() : null;
+      stmt.free();
+      return row;
+    } catch (err) {
+      console.warn('[sql.js get error]:', err.message);
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -156,16 +301,21 @@ export async function get(sql, params = []) {
  */
 export async function run(sql, params = []) {
   if (connectionPromise) await connectionPromise;
+
+  // 1. MySQL
   if (activeEngine === 'mysql' && mysqlPool) {
     try {
       const [result] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
-      // Mirror writes to SQLite fallback for permanent offline/fallback persistence
+      // Mirror writes to SQLite fallback for offline persistence
       if (sqliteDb) {
         try {
           sqliteDb.run(sql, params, () => {});
-        } catch {
-          // safe to ignore mirror write error
-        }
+        } catch {}
+      } else if (sqlJsDb) {
+        try {
+          sqlJsDb.run(sql, params);
+          persistSqlJs(sqlJsDb);
+        } catch {}
       }
       return {
         lastID: result.insertId,
@@ -182,44 +332,80 @@ export async function run(sql, params = []) {
     }
   }
 
-  return new Promise((resolve, reject) => {
-    if (!sqliteDb) {
-      return resolve({ lastID: 0, changes: 0 });
-    }
-    sqliteDb.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
+  // 2. Native SQLite
+  if (sqliteDb) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.run(sql, params, function (err) {
+        if (err) reject(err);
+        else resolve({ lastID: this.lastID, changes: this.changes });
+      });
     });
-  });
+  }
+
+  // 3. Universal WebAssembly SQLite (sql.js)
+  const wasmDb = await getSqlJsEngine();
+  if (wasmDb) {
+    try {
+      wasmDb.run(sql, params);
+      persistSqlJs(wasmDb);
+      return { lastID: 1, changes: 1 };
+    } catch (err) {
+      console.error('[sql.js run error]:', err.message);
+      throw err;
+    }
+  }
+
+  return { lastID: 0, changes: 0 };
 }
 
 /**
  * Execute a raw SQL statement
  */
 export async function exec(sql) {
+  if (connectionPromise) await connectionPromise;
+
+  // 1. MySQL
   if (activeEngine === 'mysql' && mysqlPool) {
     await mysqlPool.query(sql);
     return;
   }
 
-  return new Promise((resolve, reject) => {
-    if (!sqliteDb) {
-      return resolve();
-    }
-    sqliteDb.exec(sql, (err) => {
-      if (err) reject(err);
-      else resolve();
+  // 2. Native SQLite
+  if (sqliteDb) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.exec(sql, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
-  });
+  }
+
+  // 3. Universal WebAssembly SQLite (sql.js)
+  const wasmDb = await getSqlJsEngine();
+  if (wasmDb) {
+    try {
+      wasmDb.exec(sql);
+      persistSqlJs(wasmDb);
+      return;
+    } catch (err) {
+      console.warn('[sql.js exec error]:', err.message);
+    }
+  }
 }
 
 export function getActiveEngine() {
-  return activeEngine;
+  if (activeEngine === 'mysql') return 'mysql';
+  if (sqliteDb) return 'sqlite-native';
+  if (sqlJsDb) return 'sqlite-wasm';
+  return 'sqlite-fallback';
 }
 
 export async function ensureConnected() {
   if (connectionPromise) await connectionPromise;
-  return activeEngine;
+  if (activeEngine !== 'mysql' && !sqliteDb) {
+    await getSqlJsEngine();
+  }
+  return getActiveEngine();
 }
 
 export const db = sqliteDb;

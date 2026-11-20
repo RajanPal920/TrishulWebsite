@@ -77,6 +77,7 @@ function AuthPage() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return; // Prevent duplicate submissions
     setError(null);
     setNotice(null);
     setBusy(true);
@@ -88,7 +89,21 @@ function AuthPage() {
       void navigate({ to: targetUrl });
     } catch (err: any) {
       setPassword("");
-      setError(err?.message || "Invalid work email or password.");
+      const status = err?.status;
+      const msg = err?.message || "";
+      if (status === 401) {
+        setError(msg || "Invalid work email or password. Please verify your credentials.");
+      } else if (status === 403) {
+        setError(msg || "Your account is currently inactive. Please contact customer support.");
+      } else if (status === 429) {
+        setError("Too many sign-in attempts. Please wait a few moments before trying again.");
+      } else if (status >= 500) {
+        setError("A temporary server error occurred. Our team has been notified. Please try again shortly.");
+      } else if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setError("Network error: Unable to connect to the authentication server. Please check your connection.");
+      } else {
+        setError(msg || "Invalid work email or password.");
+      }
     } finally {
       setBusy(false);
     }
