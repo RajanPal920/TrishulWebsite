@@ -1,9 +1,13 @@
+import React from "react";
+import { cn } from "@/lib/utils";
+
 interface BrandLogoProps {
   className?: string;
   priority?: boolean;
+  style?: React.CSSProperties;
 }
 
-export function BrandLogo({ className = "", priority = false }: BrandLogoProps) {
+export function BrandLogo({ className = "", priority = false, style }: BrandLogoProps) {
   return (
     <img
       src="/trishul-logo-transparent.png?v=2"
@@ -18,7 +22,8 @@ export function BrandLogo({ className = "", priority = false }: BrandLogoProps) 
       width={423}
       height={143}
       fetchPriority={priority ? "high" : "auto"}
-      className={`h-auto object-contain select-none transition-transform duration-200 ${className}`}
+      style={style}
+      className={cn("h-auto w-auto object-contain select-none transition-transform duration-200", className)}
     />
   );
 }

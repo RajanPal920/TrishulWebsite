@@ -430,8 +430,12 @@ function AdminConsolePage() {
     return (
       <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
         <div className="w-full max-w-md rounded-md border border-border bg-card/90 p-8 shadow-2xl backdrop-blur">
-          <div className="mx-auto mb-5 flex items-center justify-center">
-            <BrandLogo priority className="h-12 w-auto max-w-[220px] object-contain drop-shadow-sm" />
+          <div className="mx-auto mb-5 flex h-12 items-center justify-center overflow-hidden">
+            <BrandLogo
+              priority
+              className="h-10 max-h-10 w-auto max-w-[200px] object-contain drop-shadow-sm"
+              style={{ maxHeight: "42px", height: "42px", width: "auto" }}
+            />
           </div>
 
           <div className="text-center">
@@ -510,16 +514,19 @@ function AdminConsolePage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:px-8">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-3 group" title="Return to Trishul Metals Home">
-            <BrandLogo
-              priority
-              className="h-10 w-auto max-w-[190px] object-contain drop-shadow-sm transition-opacity group-hover:opacity-90"
-            />
-            <span className="rounded bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30">
+          <Link to="/" className="flex items-center gap-3 shrink-0 group" title="Return to Trishul Metals Home">
+            <div className="flex h-10 max-h-10 items-center overflow-hidden">
+              <BrandLogo
+                priority
+                className="h-8 md:h-9 max-h-9 w-auto max-w-[170px] object-contain drop-shadow-sm transition-opacity group-hover:opacity-90"
+                style={{ maxHeight: "36px", height: "36px", width: "auto" }}
+              />
+            </div>
+            <span className="shrink-0 rounded bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30">
               Owner Console
             </span>
           </Link>
-          <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-mono text-emerald-400 sm:flex">
+          <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-mono text-emerald-400 sm:flex shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             MySQL: trishul_db
           </div>
