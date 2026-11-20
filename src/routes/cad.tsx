@@ -32,11 +32,11 @@ export const Route = createFileRoute("/cad")({
         property: "og:description",
         content: "Parametric 3D STL and 2D DXF downloads for ASME B16.5 flanges and B16.9 fittings.",
       },
-      { property: "og:url", content: "/cad" },
+      { property: "og:url", content: "https://www.trishulmetal.com/cad" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/cad" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/cad" }],
   }),
   component: () => (
     <CadDownloadGateProvider>

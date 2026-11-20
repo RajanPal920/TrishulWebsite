@@ -16,9 +16,9 @@ export const Route = createFileRoute("/shortlist")({
       { property: "og:title", content: "Shortlist & Compare | Trishul Metals & Alloys" },
       { property: "og:description", content: "Side-by-side comparison of shortlisted grades and products." },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/shortlist" },
+      { property: "og:url", content: "https://www.trishulmetal.com/shortlist" },
     ],
-    links: [{ rel: "canonical", href: "/shortlist" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/shortlist" }],
   }),
   component: ShortlistPage,
 });

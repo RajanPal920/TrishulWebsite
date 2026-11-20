@@ -50,9 +50,14 @@ export function HeatVerify() {
         </button>
       </form>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 rounded-sm border border-primary/20 bg-primary/5 px-3.5 py-2 text-xs text-muted-foreground">
+        <span className="font-semibold text-primary">Demonstration Verification:</span>{" "}
+        The sample heat numbers below are illustrative records for testing the verification interface. Live production heat records are issued within contractual MTC dossiers upon order dispatch.
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Sample heats
+          Demonstration heats:
         </span>
         {heatRecords.map((r) => (
           <button
@@ -61,7 +66,7 @@ export function HeatVerify() {
             onClick={() => check(r.heat)}
             className="rounded-sm border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           >
-            {r.heat}
+            {r.heat} (Demo)
           </button>
         ))}
       </div>
@@ -76,9 +81,11 @@ export function HeatVerify() {
       {result ? (
         <div className="mt-5 overflow-hidden rounded-sm border border-primary/40">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-primary/10 px-4 py-3">
-            <p className="font-display text-sm font-semibold text-foreground">Heat {result.heat} verified</p>
+            <p className="font-display text-sm font-semibold text-foreground">
+              Heat {result.heat} verified (Demonstration Record)
+            </p>
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
-              EN 10204 record on file
+              EN 10204 Demo Specimen
             </span>
           </div>
           <table className="w-full border-collapse text-sm">

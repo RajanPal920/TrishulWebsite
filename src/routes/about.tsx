@@ -15,9 +15,9 @@ export const Route = createFileRoute("/about")({
       },
       { property: "og:title", content: "About Trishul Metals & Alloys" },
       { property: "og:description", content: company.tagline },
-      { property: "og:url", content: "/about" },
+      { property: "og:url", content: "https://www.trishulmetal.com/about" },
     ],
-    links: [{ rel: "canonical", href: "/about" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/about" }],
   }),
   component: About,
 });

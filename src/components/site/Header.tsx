@@ -16,34 +16,60 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const productMenu: NavGroup = {
+const productsMenu: NavGroup = {
   label: "Products & Supply",
   items: [
-    { to: "/products", label: "Products", desc: "Flanges, pipe fittings, pipes & tubes" },
-    { to: "/materials", label: "Materials", desc: "Nickel alloys, duplex, super duplex & stainless" },
-    { to: "/stock", label: "Live stock", desc: "Ready warehouse inventory in Kalamboli" },
-    { to: "/processing", label: "Processing", desc: "Cut-to-size, bevelling & custom machining" },
-    { to: "/matrix", label: "Directory", desc: "Grade × product specification matrix" },
+    { to: "/products", label: "Products catalogue", desc: "Flanges, fittings, pipes & structural sections" },
+    { to: "/materials", label: "Materials & alloys", desc: "Nickel alloys, duplex, super duplex & stainless" },
+    { to: "/stock", label: "Live warehouse stock", desc: "Ready facility inventory with allocations" },
+    { to: "/processing", label: "Value-add processing", desc: "Cut-to-size, bevelling & custom machining" },
+    { to: "/matrix", label: "Specification matrix", desc: "Grade × product ASTM/ASME cross-reference" },
   ],
 };
 
-const technicalMenu: NavGroup = {
-  label: "Technical & Tools",
+const buyerToolsMenu: NavGroup = {
+  label: "Buyer Tools",
   items: [
-    { to: "/cad", label: "CAD library", desc: "3D CAD models & 2D engineering drawings" },
-    { to: "/technical", label: "Technical centre", desc: "Material data, standards & metallurgy" },
-    { to: "/tools", label: "Calculation tools", desc: "Pipe weight & engineering calculators" },
-    { to: "/landed-cost", label: "Landed cost", desc: "Export freight & landed cost estimator" },
+    { to: "/rfq", label: "Request for quote (RFQ)", desc: "Multi-line inquiry engine & BOQ / MTO import" },
+    { to: "/planner", label: "Delivery planner", desc: "Milestone & reverse PO date calculator" },
+    { to: "/trade-desk", label: "Export trade desk", desc: "HS code lookup, tariff stacks & 2026 trade measures" },
+    { to: "/landed-cost", label: "Landed cost calculator", desc: "Multi-currency FOB, CIF, DDP export estimator" },
+    { to: "/tools", label: "Engineering calculators", desc: "Pipe weight, flange ratings & pressure calculators" },
+  ],
+};
+
+const industriesMenu: NavGroup = {
+  label: "Industries",
+  items: [
+    { to: "/industries", label: "All industries overview", desc: "Critical piping supply across 12 sectors" },
+    { to: "/industries/oil-gas", label: "Oil, gas & offshore", desc: "Upstream, subsea & FPSO high-pressure piping" },
+    { to: "/industries/data-centres-liquid-cooling", label: "Data centres & cooling", desc: "Direct-to-chip & immersion cooling manifolds" },
+    { to: "/industries/green-hydrogen", label: "Green hydrogen & ammonia", desc: "High-pressure H₂ embrittlement resistant alloys" },
+    { to: "/industries/nuclear-power", label: "Nuclear power generation", desc: "ASME Section III safety class 1-3 piping" },
+    { to: "/industries/chemical-processing", label: "Chemical & petrochemical", desc: "Corrosive acid & high-temperature service" },
+    { to: "/industries/marine-defense", label: "Marine & naval defence", desc: "Seawater piping, Cu-Ni & super duplex systems" },
+  ],
+};
+
+const knowledgeMenu: NavGroup = {
+  label: "Knowledge",
+  items: [
+    { to: "/cad", label: "CAD & 2D drawing library", desc: "Download 3D STEP & 2D dimensional drawings" },
+    { to: "/technical", label: "Technical centre", desc: "Metallurgy data, standards & corrosion guides" },
+    { to: "/matrix", label: "Material cross-reference", desc: "Equivalent grades: ASTM, DIN, EN, ISO, UNS" },
+    { to: "/processing", label: "Processing & tolerances", desc: "Bevel angles, cutting tolerances & testing" },
   ],
 };
 
 const companyMenu: NavGroup = {
   label: "Company",
   items: [
-    { to: "/quality", label: "Quality & testing", desc: "ISO 9001:2015, MTC 3.1/3.2 dossiers" },
-    { to: "/industries", label: "Industries", desc: "Offshore, marine, chemical & desalination" },
-    { to: "/clients", label: "Clients", desc: "Approved vendor track record & references" },
-    { to: "/faq", label: "FAQ", desc: "Ordering, lead times & technical FAQs" },
+    { to: "/about", label: "About Trishul Metals", desc: "Leadership, facility, history & capabilities" },
+    { to: "/quality", label: "Quality & compliance", desc: "ISO 9001:2015, EN 10204 3.1/3.2, TPI inspections" },
+    { to: "/vendor-registration", label: "Vendor onboarding pack", desc: "GSTIN, IEC, PAN, bank details & terms" },
+    { to: "/clients", label: "Track record & clients", desc: "Global supply history & verified project delivery" },
+    { to: "/faq", label: "Frequently asked questions", desc: "Ordering, lead times, packing & payment FAQs" },
+    { to: "/contact", label: "Contact & locations", desc: "Mumbai HQ & Kalamboli central warehouse" },
   ],
 };
 
@@ -179,24 +205,40 @@ export function Header() {
         </Link>
 
         {/* Desktop Navigation Links with Dropdown Groups */}
-        <nav className="hidden items-center gap-4 lg:flex xl:gap-6" aria-label="Main">
-          {/* Products & Supply Menu */}
+        <nav className="hidden items-center gap-3 lg:flex xl:gap-5" aria-label="Main">
+          {/* 1. Products & Supply Menu */}
           <DesktopDropdown
-            group={productMenu}
-            isOpen={activeMenu === productMenu.label}
-            onOpen={() => setActiveMenu(productMenu.label)}
+            group={productsMenu}
+            isOpen={activeMenu === productsMenu.label}
+            onOpen={() => setActiveMenu(productsMenu.label)}
             onClose={() => setActiveMenu(null)}
           />
 
-          {/* Technical & Tools Menu */}
+          {/* 2. Buyer Tools Menu */}
           <DesktopDropdown
-            group={technicalMenu}
-            isOpen={activeMenu === technicalMenu.label}
-            onOpen={() => setActiveMenu(technicalMenu.label)}
+            group={buyerToolsMenu}
+            isOpen={activeMenu === buyerToolsMenu.label}
+            onOpen={() => setActiveMenu(buyerToolsMenu.label)}
             onClose={() => setActiveMenu(null)}
           />
 
-          {/* Company Menu */}
+          {/* 3. Industries Menu */}
+          <DesktopDropdown
+            group={industriesMenu}
+            isOpen={activeMenu === industriesMenu.label}
+            onOpen={() => setActiveMenu(industriesMenu.label)}
+            onClose={() => setActiveMenu(null)}
+          />
+
+          {/* 4. Knowledge Menu */}
+          <DesktopDropdown
+            group={knowledgeMenu}
+            isOpen={activeMenu === knowledgeMenu.label}
+            onOpen={() => setActiveMenu(knowledgeMenu.label)}
+            onClose={() => setActiveMenu(null)}
+          />
+
+          {/* 5. Company Menu */}
           <DesktopDropdown
             group={companyMenu}
             isOpen={activeMenu === companyMenu.label}
@@ -204,7 +246,7 @@ export function Header() {
             onClose={() => setActiveMenu(null)}
           />
 
-          {/* Direct Stock link with badge */}
+          {/* Direct Stock link with live badge */}
           <Link
             to="/stock"
             activeProps={{ className: "text-primary font-semibold" }}
@@ -212,15 +254,6 @@ export function Header() {
           >
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
             Live stock
-          </Link>
-
-          {/* Direct Contact link */}
-          <Link
-            to="/contact"
-            activeProps={{ className: "text-primary font-semibold" }}
-            className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary xl:text-sm whitespace-nowrap"
-          >
-            Contact
           </Link>
         </nav>
 
@@ -285,19 +318,19 @@ export function Header() {
           aria-label="Mobile"
         >
           <div className="space-y-5">
-            {/* Products & Supply Group */}
+            {/* 1. Products & Supply Group */}
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
                 Products & Supply
               </p>
               <ul className="grid grid-cols-2 gap-2">
-                {productMenu.items.map((item) => (
+                {productsMenu.items.map((item) => (
                   <li key={item.to}>
                     <Link
                       to={item.to}
                       onClick={() => setOpen(false)}
                       activeProps={{ className: "text-primary font-semibold" }}
-                      className="block py-1 text-sm font-medium text-muted-foreground hover:text-primary"
+                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary"
                     >
                       {item.label}
                     </Link>
@@ -306,19 +339,19 @@ export function Header() {
               </ul>
             </div>
 
-            {/* Technical & Tools Group */}
+            {/* 2. Buyer Tools Group */}
             <div className="border-t border-border/50 pt-3">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
-                Technical & Tools
+                Buyer Tools
               </p>
               <ul className="grid grid-cols-2 gap-2">
-                {technicalMenu.items.map((item) => (
+                {buyerToolsMenu.items.map((item) => (
                   <li key={item.to}>
                     <Link
                       to={item.to}
                       onClick={() => setOpen(false)}
                       activeProps={{ className: "text-primary font-semibold" }}
-                      className="block py-1 text-sm font-medium text-muted-foreground hover:text-primary"
+                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary"
                     >
                       {item.label}
                     </Link>
@@ -327,7 +360,49 @@ export function Header() {
               </ul>
             </div>
 
-            {/* Company Group */}
+            {/* 3. Industries Group */}
+            <div className="border-t border-border/50 pt-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
+                Industries
+              </p>
+              <ul className="grid grid-cols-2 gap-2">
+                {industriesMenu.items.map((item) => (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      onClick={() => setOpen(false)}
+                      activeProps={{ className: "text-primary font-semibold" }}
+                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary truncate"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 4. Knowledge Group */}
+            <div className="border-t border-border/50 pt-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
+                Knowledge
+              </p>
+              <ul className="grid grid-cols-2 gap-2">
+                {knowledgeMenu.items.map((item) => (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      onClick={() => setOpen(false)}
+                      activeProps={{ className: "text-primary font-semibold" }}
+                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 5. Company Group */}
             <div className="border-t border-border/50 pt-3">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
                 Company & Contact
@@ -339,7 +414,7 @@ export function Header() {
                       to={item.to}
                       onClick={() => setOpen(false)}
                       activeProps={{ className: "text-primary font-semibold" }}
-                      className="block py-1 text-sm font-medium text-muted-foreground hover:text-primary"
+                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary"
                     >
                       {item.label}
                     </Link>
@@ -350,7 +425,7 @@ export function Header() {
                     to="/contact"
                     onClick={() => setOpen(false)}
                     activeProps={{ className: "text-primary font-semibold" }}
-                    className="block py-1 text-sm font-semibold text-primary hover:underline"
+                    className="block py-1 text-xs sm:text-sm font-semibold text-primary hover:underline"
                   >
                     Contact Desk →
                   </Link>

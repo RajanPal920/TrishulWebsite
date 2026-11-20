@@ -43,9 +43,9 @@ export const Route = createFileRoute("/materials/$slug/$product")({
         { property: "og:title", content: `${m.name} ${p.name} | Trishul Metals` },
         { property: "og:description", content: description.slice(0, 158) },
         { property: "og:type", content: "product" },
-        { property: "og:url", content: `/materials/${m.slug}/${p.slug}` },
+        { property: "og:url", content: `https://www.trishulmetal.com/materials/${m.slug}/${p.slug}` },
       ],
-      links: [{ rel: "canonical", href: `/materials/${m.slug}/${p.slug}` }],
+      links: [{ rel: "canonical", href: `https://www.trishulmetal.com/materials/${m.slug}/${p.slug}` }],
       scripts: [
         breadcrumbScript([
           { label: "Home", to: "/" },

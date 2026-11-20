@@ -20,6 +20,7 @@ import { Route as FaqRouteImport } from './routes/faq'
 import { Route as LandedCostRouteImport } from './routes/landed-cost'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as MatrixRouteImport } from './routes/matrix'
+import { Route as PlannerRouteImport } from './routes/planner'
 import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProcessingRouteImport } from './routes/processing'
@@ -30,6 +31,8 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StockRouteImport } from './routes/stock'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ToolsRouteImport } from './routes/tools'
+import { Route as TradeDeskRouteImport } from './routes/trade-desk'
+import { Route as VendorRegistrationRouteImport } from './routes/vendor-registration'
 import { Route as IndustriesIndexRouteImport } from './routes/industries.index'
 import { Route as IndustriesSlugRouteImport } from './routes/industries.$slug'
 import { Route as MaterialsIndexRouteImport } from './routes/materials.index'
@@ -97,6 +100,11 @@ const MatrixRoute = MatrixRouteImport.update({
   path: '/matrix',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlannerRoute = PlannerRouteImport.update({
+  id: '/planner',
+  path: '/planner',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalRoute = PortalRouteImport.update({
   id: '/portal',
   path: '/portal',
@@ -145,6 +153,16 @@ const TermsRoute = TermsRouteImport.update({
 const ToolsRoute = ToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TradeDeskRoute = TradeDeskRouteImport.update({
+  id: '/trade-desk',
+  path: '/trade-desk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VendorRegistrationRoute = VendorRegistrationRouteImport.update({
+  id: '/vendor-registration',
+  path: '/vendor-registration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndustriesIndexRoute = IndustriesIndexRouteImport.update({
@@ -215,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/planner': typeof PlannerRoute
   '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
@@ -225,6 +244,8 @@ export interface FileRoutesByFullPath {
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
+  '/trade-desk': typeof TradeDeskRoute
+  '/vendor-registration': typeof VendorRegistrationRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -249,6 +270,7 @@ export interface FileRoutesByTo {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/planner': typeof PlannerRoute
   '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
@@ -259,6 +281,8 @@ export interface FileRoutesByTo {
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
+  '/trade-desk': typeof TradeDeskRoute
+  '/vendor-registration': typeof VendorRegistrationRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/rfq/confirmation': typeof RfqConfirmationRoute
@@ -283,6 +307,7 @@ export interface FileRoutesById {
   '/landed-cost': typeof LandedCostRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/matrix': typeof MatrixRoute
+  '/planner': typeof PlannerRoute
   '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
@@ -293,6 +318,8 @@ export interface FileRoutesById {
   '/stock': typeof StockRoute
   '/terms': typeof TermsRoute
   '/tools': typeof ToolsRoute
+  '/trade-desk': typeof TradeDeskRoute
+  '/vendor-registration': typeof VendorRegistrationRoute
   '/industries/$slug': typeof IndustriesSlugRoute
   '/materials/$slug': typeof MaterialsSlugRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -319,6 +346,7 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/planner'
     | '/portal'
     | '/privacy'
     | '/processing'
@@ -329,6 +357,8 @@ export interface FileRouteTypes {
     | '/stock'
     | '/terms'
     | '/tools'
+    | '/trade-desk'
+    | '/vendor-registration'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -353,6 +383,7 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/planner'
     | '/portal'
     | '/privacy'
     | '/processing'
@@ -363,6 +394,8 @@ export interface FileRouteTypes {
     | '/stock'
     | '/terms'
     | '/tools'
+    | '/trade-desk'
+    | '/vendor-registration'
     | '/industries/$slug'
     | '/products/$slug'
     | '/rfq/confirmation'
@@ -386,6 +419,7 @@ export interface FileRouteTypes {
     | '/landed-cost'
     | '/llms.txt'
     | '/matrix'
+    | '/planner'
     | '/portal'
     | '/privacy'
     | '/processing'
@@ -396,6 +430,8 @@ export interface FileRouteTypes {
     | '/stock'
     | '/terms'
     | '/tools'
+    | '/trade-desk'
+    | '/vendor-registration'
     | '/industries/$slug'
     | '/materials/$slug'
     | '/products/$slug'
@@ -421,6 +457,7 @@ export interface RootRouteChildren {
   LandedCostRoute: typeof LandedCostRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MatrixRoute: typeof MatrixRoute
+  PlannerRoute: typeof PlannerRoute
   PortalRoute: typeof PortalRoute
   PrivacyRoute: typeof PrivacyRoute
   ProcessingRoute: typeof ProcessingRoute
@@ -431,6 +468,8 @@ export interface RootRouteChildren {
   StockRoute: typeof StockRoute
   TermsRoute: typeof TermsRoute
   ToolsRoute: typeof ToolsRoute
+  TradeDeskRoute: typeof TradeDeskRoute
+  VendorRegistrationRoute: typeof VendorRegistrationRoute
   IndustriesSlugRoute: typeof IndustriesSlugRoute
   MaterialsSlugRoute: typeof MaterialsSlugRouteWithChildren
   ProductsSlugRoute: typeof ProductsSlugRoute
@@ -521,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MatrixRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/planner': {
+      id: '/planner'
+      path: '/planner'
+      fullPath: '/planner'
+      preLoaderRoute: typeof PlannerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal': {
       id: '/portal'
       path: '/portal'
@@ -589,6 +635,20 @@ declare module '@tanstack/react-router' {
       path: '/tools'
       fullPath: '/tools'
       preLoaderRoute: typeof ToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trade-desk': {
+      id: '/trade-desk'
+      path: '/trade-desk'
+      fullPath: '/trade-desk'
+      preLoaderRoute: typeof TradeDeskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vendor-registration': {
+      id: '/vendor-registration'
+      path: '/vendor-registration'
+      fullPath: '/vendor-registration'
+      preLoaderRoute: typeof VendorRegistrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/industries/': {
@@ -697,6 +757,7 @@ const rootRouteChildren: RootRouteChildren = {
   LandedCostRoute: LandedCostRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   MatrixRoute: MatrixRoute,
+  PlannerRoute: PlannerRoute,
   PortalRoute: PortalRoute,
   PrivacyRoute: PrivacyRoute,
   ProcessingRoute: ProcessingRoute,
@@ -707,6 +768,8 @@ const rootRouteChildren: RootRouteChildren = {
   StockRoute: StockRoute,
   TermsRoute: TermsRoute,
   ToolsRoute: ToolsRoute,
+  TradeDeskRoute: TradeDeskRoute,
+  VendorRegistrationRoute: VendorRegistrationRoute,
   IndustriesSlugRoute: IndustriesSlugRoute,
   MaterialsSlugRoute: MaterialsSlugRouteWithChildren,
   ProductsSlugRoute: ProductsSlugRoute,

@@ -15,9 +15,9 @@ export const Route = createFileRoute("/contact")({
       { property: "og:description", content: "Mumbai headquarters — email, phone and enquiry details." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:url", content: "/contact" },
+      { property: "og:url", content: "https://www.trishulmetal.com/contact" },
     ],
-    links: [{ rel: "canonical", href: "/contact" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/contact" }],
   }),
   component: Contact,
 });

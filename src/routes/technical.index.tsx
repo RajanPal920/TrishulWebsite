@@ -13,9 +13,9 @@ export const Route = createFileRoute("/technical/")({
       },
       { property: "og:title", content: "Technical Knowledge Centre | Trishul Metals" },
       { property: "og:description", content: "ASTM, ASME, NACE and NORSOK M-630 standards, corrosion and CRA material selection guidance." },
-      { property: "og:url", content: "/technical" },
+      { property: "og:url", content: "https://www.trishulmetal.com/technical" },
     ],
-    links: [{ rel: "canonical", href: "/technical" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/technical" }],
   }),
   component: TechnicalIndex,
 });

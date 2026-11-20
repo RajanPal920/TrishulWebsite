@@ -2,6 +2,7 @@ import type { ProductType, ProductCategory } from "./products.types";
 import { pipeProducts } from "./products.pipes";
 import { forgedProducts } from "./products.forged";
 import { longFlatProducts } from "./products.longflat";
+import { structuralProducts } from "./products.structural";
 import { pvcProducts } from "./products.pvc";
 
 export * from "./products.types";
@@ -670,6 +671,7 @@ export const productTypes: ProductType[] = [
   ...forgedProducts,
   ...pipeProducts,
   ...longFlatProducts,
+  ...structuralProducts,
   ...pvcProducts,
 ];
 

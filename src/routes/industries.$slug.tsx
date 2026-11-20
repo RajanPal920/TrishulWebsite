@@ -22,9 +22,9 @@ export const Route = createFileRoute("/industries/$slug")({
         { property: "og:title", content: title },
         { property: "og:description", content: i.tagline },
         { property: "og:type", content: "article" },
-        { property: "og:url", content: `/industries/${i.slug}` },
+        { property: "og:url", content: `https://www.trishulmetal.com/industries/${i.slug}` },
       ],
-      links: [{ rel: "canonical", href: `/industries/${i.slug}` }],
+      links: [{ rel: "canonical", href: `https://www.trishulmetal.com/industries/${i.slug}` }],
       scripts: [
         breadcrumbScript([
           { label: "Home", to: "/" },

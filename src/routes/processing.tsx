@@ -42,11 +42,11 @@ export const Route = createFileRoute("/processing")({
         content:
           "Precision saw cutting, ASME B16.25 end bevelling, boring and facing — drop-in alloy sub-components machined to your drawing.",
       },
-      { property: "og:url", content: "/processing" },
+      { property: "og:url", content: "https://www.trishulmetal.com/processing" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/processing" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/processing" }],
     scripts: [
       breadcrumbScript([{ label: "Home", to: "/" }, { label: "Processing" }]),
       itemListScript({

@@ -18,10 +18,10 @@ export const Route = createFileRoute("/matrix")({
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/matrix" },
+      { property: "og:url", content: "https://www.trishulmetal.com/matrix" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/matrix" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/matrix" }],
   }),
   component: MatrixIndex,
 });

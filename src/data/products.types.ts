@@ -5,6 +5,7 @@ export type ProductCategory =
   | "pipes-tubes"
   | "bars"
   | "sheets-plates"
+  | "structural"
   | "pvc-piping";
 
 export interface ProductType {
@@ -116,6 +117,19 @@ export const categoryMeta: Record<
       "ASTM F441 / D2846 / F438 / F439 (CPVC)",
     ],
   },
+  structural: {
+    name: "Structural Steel",
+    singular: "Structural Steel",
+    blurb:
+      "Hot-rolled structural steel beams, parallel flange channels, equal & unequal angles and hollow sections (SHS, RHS, CHS) in IS 2062, EN 10025 (S275, S355), ASTM A36 and ASTM A572 Grade 50 for offshore topsides, pipe racks, platform skids and industrial plant framing.",
+    standards: [
+      "IS 2062 (E250, E350, E450)",
+      "EN 10025-2 (S275JR/J0/J2, S355JR/J0/J2/K2)",
+      "ASTM A36 / A36M (Carbon Structural Steel)",
+      "ASTM A572 / A572M (High-Strength Low-Alloy Grade 50)",
+      "ASTM A500 / EN 10210 / EN 10219 (Hollow Sections)",
+    ],
+  },
 };
 
 export const categoryOrder: ProductCategory[] = [
@@ -125,5 +139,6 @@ export const categoryOrder: ProductCategory[] = [
   "pipes-tubes",
   "bars",
   "sheets-plates",
+  "structural",
   "pvc-piping",
 ];

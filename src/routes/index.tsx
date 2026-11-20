@@ -49,10 +49,10 @@ export const Route = createFileRoute("/")({
       { property: "og:image", content: `${company.siteUrl}${heroPipeInventory2560.url}` },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: `${company.siteUrl}${heroPipeInventory2560.url}` },
-      { property: "og:url", content: "/" },
+      { property: "og:url", content: "https://www.trishulmetal.com/" },
     ],
     links: [
-      { rel: "canonical", href: "/" },
+      { rel: "canonical", href: "https://www.trishulmetal.com/" },
       {
         rel: "preload",
         as: "image",

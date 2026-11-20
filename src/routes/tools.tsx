@@ -20,11 +20,11 @@ export const Route = createFileRoute("/tools")({
         content:
           "Interactive pipe weight per metre calculator, ASME schedule wall thickness reference table, Barlow internal pressure, and international material cross-reference.",
       },
-      { property: "og:url", content: "/tools" },
+      { property: "og:url", content: "https://www.trishulmetal.com/tools" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/tools" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/tools" }],
   }),
   component: ToolsPage,
 });

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Section, SectionHead, Breadcrumbs, CtaBand } from "@/components/site/parts";
 import { getStockItems, type StockRow } from "@/lib/stock.functions";
+import { company } from "@/data/company";
 
 export const Route = createFileRoute("/stock")({
   head: () => ({
@@ -15,11 +16,11 @@ export const Route = createFileRoute("/stock")({
       },
       { property: "og:title", content: "Live Stock Availability | Trishul Metals & Alloys" },
       { property: "og:description", content: "Search what is physically ready in our Kalamboli warehouse." },
-      { property: "og:url", content: "/stock" },
+      { property: "og:url", content: `${company.siteUrl}/stock` },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/stock" }],
+    links: [{ rel: "canonical", href: `${company.siteUrl}/stock` }],
   }),
   component: StockPage,
 });
@@ -74,8 +75,16 @@ function StockPage() {
             intro="Search our Kalamboli ready-stock list by grade, product, size or specification. Ready lines ship against a released order; limited lines are part-quantity and balance is produced to order."
           />
         </div>
+
+        <div className="mt-4 rounded-sm border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
+          <p className="font-semibold text-primary">Indicative Warehouse Inventory Notice</p>
+          <p className="mt-1">
+            Listed inventory quantities, dimensional specifications and demonstration heat numbers illustrate active material stock held at our Kalamboli facility. Current real-time allocations and certified mill heat numbers are assigned and confirmed upon formal RFQ quotation.
+          </p>
+        </div>
+
         {lastVerified ? (
-          <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
             Stock verified {lastVerified} · {rows.length} live lines
           </p>
         ) : null}

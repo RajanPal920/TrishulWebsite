@@ -11,6 +11,16 @@ import { submitRfq } from "@/lib/rfq.functions";
 import { rfqCertificationOptions, rfqProcessingOptions, rfqUnits } from "@/data/rfq-options";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import {
+  FileSpreadsheet,
+  LayoutGrid,
+  Table as TableIcon,
+  Upload,
+  X,
+  Check,
+  Trash2,
+  AlertCircle,
+} from "lucide-react";
 
 
 interface RfqSearch {
@@ -55,11 +65,11 @@ export const Route = createFileRoute("/rfq")({
         property: "og:description",
         content: "Multi-line RFQ with MTO spreadsheet and drawing upload — priced with lead time and documentation scope.",
       },
-      { property: "og:url", content: "/rfq" },
+      { property: "og:url", content: "https://www.trishulmetal.com/rfq" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/rfq" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/rfq" }],
   }),
   component: Rfq,
 });
@@ -148,6 +158,91 @@ function readAsBase64(file: File): Promise<string> {
   });
 }
 
+function parseBoqText(rawText: string): Line[] {
+  const rawRows = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!rawRows.length) return [];
+
+  const firstRow = (rawRows[0] || "").toLowerCase();
+  const hasHeader =
+    firstRow.includes("grade") ||
+    firstRow.includes("material") ||
+    firstRow.includes("product") ||
+    firstRow.includes("size") ||
+    firstRow.includes("qty") ||
+    firstRow.includes("quantity") ||
+    firstRow.includes("item");
+
+  const rows = hasHeader ? rawRows.slice(1) : rawRows;
+
+  return rows.map((row) => {
+    let cols: string[] = [];
+    if (row.includes("\t")) {
+      cols = row.split("\t").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+    } else {
+      cols = (row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || row.split(",")).map((c) =>
+        c.trim().replace(/^["']|["']$/g, "")
+      );
+    }
+
+    let material = "";
+    let product = "";
+    let size = "";
+    let rating = "";
+    let facing = "";
+    let quantity = "";
+    let unit = "pcs";
+    let cutLength = "";
+
+    for (const c of cols) {
+      if (!c) continue;
+      const lower = c.toLowerCase();
+      if (/^\d+(\.\d+)?$/.test(c) && !quantity) {
+        quantity = c;
+        continue;
+      }
+      if (/^(pcs|pieces|mtr|meters|kg|kgs|nos|units|set|tonnes|tons)$/i.test(c)) {
+        unit = lower.startsWith("m") ? "mtr" : lower.startsWith("k") ? "kg" : lower.startsWith("t") ? "tons" : "pcs";
+        continue;
+      }
+      if (/^(class\s*\d+|\d+#|sch\s*\w+|schedule\s*\w+|pn\s*\d+|3000#|6000#|9000#|150#|300#|600#|900#|1500#|2500#)/i.test(c)) {
+        rating = c;
+        continue;
+      }
+      if (/^(rf|rtj|ff|flat\s*face|raised\s*face|ring\s*type\s*joint)/i.test(c)) {
+        facing = c.toUpperCase();
+        continue;
+      }
+      if (/^(\d+(\.\d+)?(\/\d+)?["']?(\s*nps)?|\d+\s*mm|\d+x\d+)/i.test(c) && !size) {
+        size = c;
+        continue;
+      }
+      if (/(flange|elbow|tee|reducer|cap|pipe|tube|fitting|bend|nipple|coupling|o-let|beam|channel|angle)/i.test(c) && !product) {
+        product = c;
+        continue;
+      }
+      if (/(304|316|321|347|904|2205|2507|inconel|incoloy|hastelloy|monel|a105|a350|a234|a106|a333|titanium|carbon|duplex|ss|stainless)/i.test(c) && !material) {
+        material = c;
+        continue;
+      }
+      if (!material) material = c;
+      else if (!product) product = c;
+      else if (!size) size = c;
+    }
+
+    return {
+      material,
+      product: product || "Piping Component",
+      size,
+      rating,
+      facing,
+      quantity: quantity || "1",
+      unit: unit || "pcs",
+      cutLength,
+      processing: [],
+    };
+  });
+}
+
 function Rfq() {
   const search = Route.useSearch();
   const navigate = useNavigate();
@@ -213,6 +308,48 @@ function Rfq() {
       }));
     }
   }, [user]);
+
+  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [boqModalOpen, setBoqModalOpen] = useState(false);
+  const [boqInputText, setBoqInputText] = useState("");
+  const [boqParsedLines, setBoqParsedLines] = useState<Line[]>([]);
+  const [boqFileName, setBoqFileName] = useState("");
+
+  const handleBoqTextChange = (text: string) => {
+    setBoqInputText(text);
+    setBoqParsedLines(parseBoqText(text));
+  };
+
+  const handleBoqFileUpload = (file: File) => {
+    setBoqFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = String(e.target?.result || "");
+      handleBoqTextChange(content);
+    };
+    reader.readAsText(file);
+  };
+
+  const applyBoq = (mode: "append" | "replace") => {
+    if (!boqParsedLines.length) return;
+    if (mode === "append") {
+      setLines((prev) => [...prev.filter((l) => l.material || l.product), ...boqParsedLines]);
+    } else {
+      setLines(boqParsedLines);
+    }
+    const sourceBlob = new Blob([boqInputText], { type: "text/csv" });
+    const sourceFile = new File([sourceBlob], boqFileName || `imported-mto-${Date.now()}.csv`, {
+      type: "text/csv",
+    });
+    setFiles((prev) => [...prev, sourceFile]);
+    setBoqModalOpen(false);
+    setBoqInputText("");
+    setBoqParsedLines([]);
+    setBoqFileName("");
+    if (boqParsedLines.length >= 4) {
+      setViewMode("table");
+    }
+  };
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -397,9 +534,157 @@ function Rfq() {
         <form onSubmit={onSubmit} className="grid gap-10 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-10">
             <div className="scroll-reveal">
-              <p className="eyebrow">1 — Line items</p>
-              <div className="mt-4 space-y-4">
-                <AnimatePresence initial={false}>
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/80">
+                <div>
+                  <p className="eyebrow">1 — Line items ({lines.length})</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Add components manually or import your entire MTO / BOQ spreadsheet.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBoqModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    <span>Import BOQ / MTO</span>
+                  </button>
+                  <div className="flex items-center rounded-sm border border-border bg-background p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("card")}
+                      className={`p-1.5 rounded-sm transition-colors ${
+                        viewMode === "card"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Card view"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("table")}
+                      className={`p-1.5 rounded-sm transition-colors ${
+                        viewMode === "table"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Compact table view"
+                    >
+                      <TableIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {viewMode === "table" ? (
+                /* Compact Table View */
+                <div className="mt-4 overflow-x-auto rounded-md border border-border bg-card">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 font-mono text-[10px] uppercase text-muted-foreground">
+                        <th className="py-2.5 px-3 text-center w-10">#</th>
+                        <th className="py-2.5 px-3 min-w-[140px]">Material Grade</th>
+                        <th className="py-2.5 px-3 min-w-[150px]">Product Category</th>
+                        <th className="py-2.5 px-3 min-w-[120px]">Size / NPS</th>
+                        <th className="py-2.5 px-3 min-w-[120px]">Class / Sched</th>
+                        <th className="py-2.5 px-3 min-w-[80px]">Facing</th>
+                        <th className="py-2.5 px-3 min-w-[70px]">Qty</th>
+                        <th className="py-2.5 px-3 min-w-[75px]">Unit</th>
+                        <th className="py-2.5 px-3 text-right w-14"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {lines.map((line, i) => (
+                        <tr key={i} className="hover:bg-muted/10 transition-colors">
+                          <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground text-center">
+                            {i + 1}
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              list="rfq-materials"
+                              value={line.material}
+                              onChange={(e) => setLine(i, { material: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+                              placeholder="e.g. Duplex 2205"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              list="rfq-products"
+                              value={line.product}
+                              onChange={(e) => setLine(i, { product: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+                              placeholder="e.g. Weld Neck Flanges"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              value={line.size}
+                              onChange={(e) => setLine(i, { size: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+                              placeholder='e.g. 6"'
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              value={line.rating}
+                              onChange={(e) => setLine(i, { rating: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+                              placeholder="e.g. Class 300"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              value={line.facing}
+                              onChange={(e) => setLine(i, { facing: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+                              placeholder="RF"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              value={line.quantity}
+                              onChange={(e) => setLine(i, { quantity: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none text-right font-mono"
+                              placeholder="1"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <select
+                              value={line.unit}
+                              onChange={(e) => setLine(i, { unit: e.target.value })}
+                              className="w-full rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:border-primary focus:outline-none"
+                            >
+                              {units.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-1.5 px-2 text-right">
+                            {lines.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => setLines((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                                title="Remove item"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  <AnimatePresence initial={false}>
                 {lines.map((line, i) => (
                   <motion.div key={i} className="surface-panel overflow-hidden rounded-md p-5" {...dynamicMotion}>
                     <div className="flex items-center justify-between">
@@ -531,6 +816,7 @@ function Rfq() {
                 ))}
                 </AnimatePresence>
               </div>
+            )}
               <button
                 type="button"
                 onClick={() => setLines((prev) => [...prev, { ...emptyLine }])}
@@ -794,6 +1080,138 @@ function Rfq() {
           </aside>
         </form>
       </Section>
+
+      {/* BOQ / MTO Import Modal */}
+      {boqModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm animate-in fade-in-0 duration-150">
+          <div className="surface-panel w-full max-w-3xl rounded-lg border border-border p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-bold text-foreground">
+                  Import Material Take-Off (MTO) / Bill of Quantities (BOQ)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBoqModalOpen(false)}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Paste rows copied directly from Microsoft Excel, Google Sheets, or a CSV file. The parser detects grade, product type, dimensions, pressure rating, facing, and quantity automatically.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Paste Excel Cells or CSV Lines:
+                </label>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary hover:underline">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>Choose .csv / .txt file</span>
+                  <input
+                    type="file"
+                    accept=".csv,.txt,.tsv"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleBoqFileUpload(e.target.files[0]);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <textarea
+                rows={6}
+                value={boqInputText}
+                onChange={(e) => handleBoqTextChange(e.target.value)}
+                placeholder="Paste here... Example:&#10;Duplex 2205	Weld Neck Flange	6&quot;	Class 300	RF	24	pcs&#10;Inconel 625	Seamless Pipe	2&quot;	SCH 80S		120	mtr&#10;316L	Equal Tee	4&quot;	SCH 40S		45	pcs"
+                className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+              />
+            </div>
+
+            {/* Parsed Preview */}
+            {boqParsedLines.length > 0 && (
+              <div className="space-y-2 border-t border-border pt-3">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-foreground">
+                    Parsed Preview ({boqParsedLines.length} item{boqParsedLines.length > 1 ? "s" : ""})
+                  </span>
+                  <span className="text-emerald-400 font-mono text-[11px]">
+                    ✓ Auto-classified columns
+                  </span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto rounded border border-border bg-background/50">
+                  <table className="w-full text-left text-[11px] border-collapse">
+                    <thead className="bg-muted/50 border-b border-border font-mono text-[10px] text-muted-foreground uppercase sticky top-0">
+                      <tr>
+                        <th className="p-2">#</th>
+                        <th className="p-2">Grade</th>
+                        <th className="p-2">Product</th>
+                        <th className="p-2">Size</th>
+                        <th className="p-2">Class</th>
+                        <th className="p-2">Facing</th>
+                        <th className="p-2">Qty</th>
+                        <th className="p-2">Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {boqParsedLines.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-muted/20">
+                          <td className="p-1.5 font-mono text-muted-foreground">{idx + 1}</td>
+                          <td className="p-1.5 font-medium text-foreground">{row.material || "—"}</td>
+                          <td className="p-1.5 text-foreground">{row.product || "—"}</td>
+                          <td className="p-1.5 text-muted-foreground">{row.size || "—"}</td>
+                          <td className="p-1.5 text-muted-foreground">{row.rating || "—"}</td>
+                          <td className="p-1.5 text-muted-foreground">{row.facing || "—"}</td>
+                          <td className="p-1.5 font-mono text-foreground">{row.quantity}</td>
+                          <td className="p-1.5 text-muted-foreground">{row.unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+              <span className="text-[11px] text-muted-foreground">
+                Original raw file will be automatically attached to your RFQ submission.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBoqModalOpen(false)}
+                  className="rounded-md border border-border px-3.5 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={boqParsedLines.length === 0}
+                  onClick={() => applyBoq("replace")}
+                  className="rounded-md border border-border px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40"
+                >
+                  Replace Lines ({boqParsedLines.length})
+                </button>
+                <button
+                  type="button"
+                  disabled={boqParsedLines.length === 0}
+                  onClick={() => applyBoq("append")}
+                  className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-40 shadow-sm"
+                >
+                  Append to Inquiry ({boqParsedLines.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

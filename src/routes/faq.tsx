@@ -14,10 +14,10 @@ export const Route = createFileRoute("/faq")({
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/faq" },
+      { property: "og:url", content: "https://www.trishulmetal.com/faq" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/faq" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/faq" }],
     scripts: [
       {
         type: "application/ld+json",

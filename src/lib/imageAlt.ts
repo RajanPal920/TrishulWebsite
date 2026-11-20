@@ -15,6 +15,8 @@ const categoryScene: Record<ProductCategory, string> = {
     "socket bores and hexagonal forged bodies grouped in a parts tray, each stamped with grade and class",
   "pipes-tubes":
     "bundled seamless lengths with capped ends and colour-coded heat-number tags on a stockyard rack",
+  structural:
+    "structural beams, channels, and angles with mill test stencils and protective primer coatings stacked in warehouse bays",
   bars: "bright-finished bar lengths racked in a bundle, ends stamped with grade and heat identification",
   "sheets-plates":
     "stacked plate with mill edges and stencilled heat identification, laid flat on timber dunnage",

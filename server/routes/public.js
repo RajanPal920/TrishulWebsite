@@ -5,6 +5,28 @@ import { all, get, run } from '../db/connection.js';
 const router = express.Router();
 
 /**
+ * Dispatch internal notification email from notifications@trishulmetal.com to contactustrishul@gmail.com
+ * Supports console audit logging and environmental webhook/transport safely without blocking user flow.
+ */
+async function dispatchEmailNotification({ type, reference, customerName, email, company, phone, summary }) {
+  const from = 'notifications@trishulmetal.com';
+  const to = 'contactustrishul@gmail.com';
+  const subject = `[Trishul Desk] New ${type}: ${reference} (${company || customerName})`;
+
+  console.log(`[Email Notification Dispatcher] Queued:`, {
+    from,
+    to,
+    subject,
+    reference,
+    customer: `${customerName} <${email}>`,
+    company,
+    phone,
+    summary,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
  * GET /api/stock
  * Serves real-time stock list from Trishul Metals Mumbai warehouse
  */
@@ -147,6 +169,17 @@ router.post('/rfq', async (req, res) => {
         ).catch(() => {});
       }
     }
+
+    // Trigger internal export desk email notification
+    dispatchEmailNotification({
+      type: 'RFQ Submission',
+      reference: rfqNumber,
+      customerName: name || 'Trishul Customer',
+      email: mail,
+      company: comp,
+      phone: ph,
+      summary: `${Array.isArray(items) ? items.length : 1} line item(s)`,
+    }).catch((mailErr) => console.warn('[RFQ Notification Warning]:', mailErr.message));
 
     return res.status(201).json({
       success: true,

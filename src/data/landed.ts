@@ -47,13 +47,13 @@ export const destPorts: DestPort[] = [
   { id: "hamburg", name: "Hamburg", country: "Germany", region: "Europe", transitDays: "24 – 30 days", freightPerTonne: 178, destHandling: 590, dutyPct: 0.027, inlandPerTonne: 72 },
   { id: "genoa", name: "Genoa", country: "Italy", region: "Europe", transitDays: "18 – 24 days", freightPerTonne: 152, destHandling: 520, dutyPct: 0.027, inlandPerTonne: 62 },
   { id: "felixstowe", name: "Felixstowe", country: "United Kingdom", region: "Europe", transitDays: "24 – 30 days", freightPerTonne: 182, destHandling: 610, dutyPct: 0.02, inlandPerTonne: 74 },
-  { id: "houston", name: "Houston", country: "United States", region: "Americas", transitDays: "30 – 38 days", freightPerTonne: 214, destHandling: 720, dutyPct: 0.0, inlandPerTonne: 85 },
-  { id: "new-york", name: "New York / Newark", country: "United States", region: "Americas", transitDays: "28 – 35 days", freightPerTonne: 208, destHandling: 700, dutyPct: 0.0, inlandPerTonne: 88 },
-  { id: "los-angeles", name: "Los Angeles", country: "United States", region: "Americas", transitDays: "32 – 40 days", freightPerTonne: 236, destHandling: 760, dutyPct: 0.0, inlandPerTonne: 92 },
+  { id: "houston", name: "Houston", country: "United States", region: "Americas", transitDays: "30 – 38 days", freightPerTonne: 214, destHandling: 720, dutyPct: 0.50, inlandPerTonne: 85 },
+  { id: "new-york", name: "New York / Newark", country: "United States", region: "Americas", transitDays: "28 – 35 days", freightPerTonne: 208, destHandling: 700, dutyPct: 0.50, inlandPerTonne: 88 },
+  { id: "los-angeles", name: "Los Angeles", country: "United States", region: "Americas", transitDays: "32 – 40 days", freightPerTonne: 236, destHandling: 760, dutyPct: 0.50, inlandPerTonne: 92 },
   { id: "montreal", name: "Montreal", country: "Canada", region: "Americas", transitDays: "30 – 38 days", freightPerTonne: 228, destHandling: 740, dutyPct: 0.0, inlandPerTonne: 96 },
-  { id: "singapore", name: "Singapore", country: "Singapore", region: "Asia Pacific", transitDays: "8 – 12 days", freightPerTonne: 88, destHandling: 360, dutyPct: 0.0, inlandPerTonne: 45 },
+  { id: "singapore", name: "Singapore", country: "Singapore", region: "Asia Pacific", transitDays: "8 – 12 days", freightPerTonne: 88, destHandling: 360, dutyPct: 0.09, inlandPerTonne: 45 },
   { id: "port-klang", name: "Port Klang", country: "Malaysia", region: "Asia Pacific", transitDays: "9 – 13 days", freightPerTonne: 92, destHandling: 350, dutyPct: 0.0, inlandPerTonne: 46 },
-  { id: "melbourne", name: "Melbourne", country: "Australia", region: "Asia Pacific", transitDays: "20 – 26 days", freightPerTonne: 196, destHandling: 640, dutyPct: 0.05, inlandPerTonne: 90 },
+  { id: "melbourne", name: "Melbourne", country: "Australia", region: "Asia Pacific", transitDays: "20 – 26 days", freightPerTonne: 196, destHandling: 640, dutyPct: 0.0, inlandPerTonne: 90 },
   { id: "lagos", name: "Lagos (Apapa)", country: "Nigeria", region: "Africa", transitDays: "24 – 32 days", freightPerTonne: 205, destHandling: 690, dutyPct: 0.1, inlandPerTonne: 105 },
   { id: "durban", name: "Durban", country: "South Africa", region: "Africa", transitDays: "18 – 24 days", freightPerTonne: 172, destHandling: 560, dutyPct: 0.05, inlandPerTonne: 78 },
   { id: "alexandria", name: "Alexandria", country: "Egypt", region: "Africa", transitDays: "16 – 22 days", freightPerTonne: 158, destHandling: 540, dutyPct: 0.1, inlandPerTonne: 70 },
@@ -152,8 +152,25 @@ export function computeLanded(input: {
     lines.push({ label: "Inland delivery to project door", usd: Math.max(180, t * input.port.inlandPerTonne), note: "Road delivery within the destination metro area" });
   }
   if (order >= 5) {
-    const dutiable = lines.reduce((s, l) => s + l.usd, 0);
-    lines.push({ label: "Import duty & local levies", usd: dutiable * input.port.dutyPct, note: `Indicative ${(input.port.dutyPct * 100).toFixed(1)} % for ${input.port.country}` });
+    const isFobValued = ["United States", "Canada", "Australia"].includes(input.port.country);
+    // FOB value includes ex-works goods, inspection, export packing, and inland haulage/clearance
+    const fobBase = lines.slice(0, 4).reduce((s, l) => s + l.usd, 0);
+    const cifBase = lines.reduce((s, l) => s + l.usd, 0);
+    const dutiableBase = isFobValued ? fobBase : cifBase;
+    const dutyAmount = dutiableBase * input.port.dutyPct;
+
+    const note =
+      input.port.country === "United States"
+        ? `Section 232 (50% on steel pipe, fittings & flanges) on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
+        : isFobValued
+          ? `Indicative ${(input.port.dutyPct * 100).toFixed(1)} % on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
+          : `Indicative ${(input.port.dutyPct * 100).toFixed(1)} % on CIF value ($${cifBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+
+    lines.push({
+      label: input.port.country === "United States" ? "US Import Duty (Section 232)" : "Import duty & local levies",
+      usd: dutyAmount,
+      note,
+    });
   }
 
   const totalUsd = lines.reduce((s, l) => s + l.usd, 0);

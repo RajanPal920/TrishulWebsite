@@ -29,9 +29,9 @@ export const Route = createFileRoute("/quality")({
       },
       { property: "og:title", content: "Quality Assurance & Testing | Trishul Metals" },
       { property: "og:description", content: "Traceability, testing and inspection scope for every consignment, including NORSOK M-630 material requirements." },
-      { property: "og:url", content: "/quality" },
+      { property: "og:url", content: "https://www.trishulmetal.com/quality" },
     ],
-    links: [{ rel: "canonical", href: "/quality" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/quality" }],
   }),
   component: Quality,
 });

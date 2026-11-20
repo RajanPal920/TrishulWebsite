@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Section, SectionHead, Breadcrumbs, CtaBand } from "@/components/site/parts";
 import { caseCards, dispatchStats, inspectionAgencies, projectSnapshots, trustSectors } from "@/data/clients";
+import { company } from "@/data/company";
 
 export const Route = createFileRoute("/clients")({
   head: () => ({
@@ -10,18 +11,18 @@ export const Route = createFileRoute("/clients")({
       {
         name: "description",
         content:
-          "Anonymised dispatch records and project snapshots by sector: 1,400+ tonnes exported, zero rejections across witnessed TPI inspections worldwide.",
+          "Anonymised dispatch records and supply profiles by sector: full EN 10204 3.1/3.2 traceability across witnessed TPI inspections worldwide.",
       },
       { property: "og:title", content: "Verified Global Client Trust Feed | Trishul Metals & Alloys" },
       {
         property: "og:description",
         content: "Project-sector dispatch record with inspection outcomes, tonnage and documentation scope.",
       },
-      { property: "og:url", content: "/clients" },
+      { property: "og:url", content: `${company.siteUrl}/clients` },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/clients" }],
+    links: [{ rel: "canonical", href: `${company.siteUrl}/clients` }],
   }),
   component: ClientsPage,
 });
@@ -30,6 +31,7 @@ function ClientsPage() {
   const sectors = useMemo(() => ["All sectors", ...new Set(caseCards.map((c) => c.sector))], []);
   const [sector, setSector] = useState("All sectors");
   const filtered = sector === "All sectors" ? caseCards : caseCards.filter((c) => c.sector === sector);
+  const visibleSnapshots = projectSnapshots.filter((s) => !("placeholder" in s && s.placeholder));
 
   return (
     <>
@@ -54,36 +56,38 @@ function ClientsPage() {
         </div>
       </Section>
 
-      <Section className="border-t border-border bg-card/30">
-        <SectionHead
-          eyebrow="Recent supply"
-          title="Project snapshots"
-          intro="Short-form anonymised case notes — sector, grade/product, order scale and inspection outcome. These entries are illustrative placeholders until confirmed project data is supplied."
-        />
+      {visibleSnapshots.length > 0 ? (
+        <Section className="border-t border-border bg-card/30">
+          <SectionHead
+            eyebrow="Recent supply"
+            title="Project snapshots"
+            intro="Short-form anonymised case notes — sector, grade/product, order scale and inspection outcome."
+          />
 
-        <div className="mt-8 grid gap-5 lg:grid-cols-3">
-          {projectSnapshots.map((s) => (
-            <article key={s.id} className="surface-panel flex flex-col rounded-md p-6">
-              <p className="eyebrow">{s.sector}</p>
-              <h3 className="mt-3 text-lg font-semibold leading-snug">{s.project}</h3>
-              <dl className="mt-4 space-y-2 text-sm">
-                {[
-                  ["Product supplied", s.product],
-                  ["Approximate order size", s.orderSize],
-                  ["Inspection / certification outcome", s.outcome],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-                    <dt className="w-44 shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                      {k}
-                    </dt>
-                    <dd className="text-muted-foreground">{v}</dd>
-                  </div>
-                ))}
-              </dl>
-            </article>
-          ))}
-        </div>
-      </Section>
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            {visibleSnapshots.map((s) => (
+              <article key={s.id} className="surface-panel flex flex-col rounded-md p-6">
+                <p className="eyebrow">{s.sector}</p>
+                <h3 className="mt-3 text-lg font-semibold leading-snug">{s.project}</h3>
+                <dl className="mt-4 space-y-2 text-sm">
+                  {[
+                    ["Product supplied", s.product],
+                    ["Approximate order size", s.orderSize],
+                    ["Inspection / certification outcome", s.outcome],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex flex-col gap-1 sm:flex-row sm:gap-3">
+                      <dt className="w-44 shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        {k}
+                      </dt>
+                      <dd className="text-muted-foreground">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            ))}
+          </div>
+        </Section>
+      ) : null}
 
       <Section>
         <SectionHead

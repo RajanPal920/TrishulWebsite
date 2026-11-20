@@ -26,11 +26,11 @@ export const Route = createFileRoute("/landed-cost")({
         property: "og:description",
         content: "Instant FOB, CIF and DDP landed-cost projection in USD, EUR, GBP, AED, SAR, SGD or INR.",
       },
-      { property: "og:url", content: "/landed-cost" },
+      { property: "og:url", content: "https://www.trishulmetal.com/landed-cost" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/landed-cost" }],
+    links: [{ rel: "canonical", href: "https://www.trishulmetal.com/landed-cost" }],
   }),
   component: LandedCostPage,
 });
