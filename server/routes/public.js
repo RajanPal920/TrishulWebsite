@@ -256,6 +256,17 @@ router.post('/cad-download', async (req, res) => {
       ]
     );
 
+    // Notify export desk
+    dispatchEmailNotification({
+      type: 'CAD Drawing Download Lead',
+      reference: part,
+      customerName: name || req.user?.full_name || 'CAD User',
+      email: mail,
+      company: company || req.user?.company || '',
+      phone: '',
+      summary: `Component Part Code: ${part}`,
+    }).catch(() => {});
+
     return res.json({ success: true });
   } catch (err) {
     console.error('[CAD Download Error]:', err);
@@ -292,6 +303,17 @@ router.post('/document-download', async (req, res) => {
         now,
       ]
     );
+
+    // Notify export desk
+    dispatchEmailNotification({
+      type: 'Technical Document Download',
+      reference: doc,
+      customerName: name || req.user?.full_name || 'Document User',
+      email: mail,
+      company: company || req.user?.company || '',
+      phone: '',
+      summary: `Document ID: ${doc}`,
+    }).catch(() => {});
 
     return res.json({ success: true });
   } catch (err) {

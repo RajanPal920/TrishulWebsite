@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, User as UserIcon } from "lucide-react";
+import { ChevronDown, User as UserIcon, Shield } from "lucide-react";
 import { company, offices } from "@/data/company";
 import { BrandLogo } from "@/components/site/BrandLogo";
 import { useAuth } from "@/hooks/useAuth";
@@ -474,6 +474,18 @@ export function Header() {
                 >
                   WhatsApp Desk ↗
                 </a>
+              </div>
+
+              <div className="border-t border-border/50 pt-2 flex items-center justify-between">
+                <Link
+                  to="/admin"
+                  onClick={() => setOpen(false)}
+                  className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors py-1"
+                >
+                  <Shield className="h-3.5 w-3.5 text-primary" />
+                  <span>Admin Login</span>
+                </Link>
+                <span className="font-mono text-[10px] text-muted-foreground/60">Owner Console</span>
               </div>
             </div>
           </div>

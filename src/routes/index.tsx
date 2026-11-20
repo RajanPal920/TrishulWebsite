@@ -494,14 +494,14 @@ function Home() {
               icon: "proof" as TechIconName,
               eyebrow: "Proof of supply",
               title: "Verified client trust feed",
-              body: "1,400+ tonnes exported, zero rejections across witnessed TPI inspections, mapped to real project sectors and destinations.",
+              body: "Export track record across global energy, maritime and process projects, with complete EN 10204 3.1 certification and third-party inspection dossiers.",
             },
             {
               to: "/portal",
               icon: "portal" as TechIconName,
               eyebrow: "Repeat buyers",
               title: "Client portal & dossier vault",
-              body: "Track in-transit containers, retrieve every certificate ever issued to your company and re-order a previous batch in one click.",
+              body: "Review submitted inquiries, track RFQ status, and access project documentation directly from your customer account.",
             },
             {
               to: "/tools",

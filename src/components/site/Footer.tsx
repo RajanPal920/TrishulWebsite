@@ -147,14 +147,23 @@ export function Footer() {
                 Terms of Service
               </Link>
             </li>
+            <li>
+              <Link to="/admin" className="text-xs text-muted-foreground/60 hover:text-primary transition-colors">
+                Admin Login
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
       <div className="border-t border-border px-5 py-6 md:px-10">
-        <p className="mx-auto w-full max-w-7xl font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          © {new Date().getFullYear()} {company.legalName} · Grades supplied subject to availability and
-          specification review
-        </p>
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            © {new Date().getFullYear()} {company.legalName} · Grades supplied subject to availability and specification review
+          </p>
+          <Link to="/admin" className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50 hover:text-primary transition-colors">
+            Admin Console
+          </Link>
+        </div>
       </div>
     </footer>
   );

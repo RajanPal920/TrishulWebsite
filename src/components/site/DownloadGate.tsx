@@ -195,14 +195,29 @@ export function DownloadCard({
   description: string;
 }) {
   const [open, setOpen] = useState(false);
+  const pdfPath =
+    documentKey === "product-catalogue-2026"
+      ? "/resources/product-catalogue-2026.pdf"
+      : "/resources/technical-guide.pdf";
+
   return (
     <article className="surface-panel flex flex-col rounded-md p-6">
       <p className="eyebrow">PDF</p>
       <h3 className="mt-2 font-display text-lg font-semibold">{title}</h3>
       <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
-      <Button className="mt-5 w-full sm:w-auto" onClick={() => setOpen(true)}>
-        Download (PDF)
-      </Button>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Button className="flex-1" onClick={() => setOpen(true)}>
+          Download (PDF)
+        </Button>
+        <a
+          href={pdfPath}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded border border-border px-3.5 py-2 text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors text-center"
+        >
+          View PDF ↗
+        </a>
+      </div>
       <DownloadGate documentKey={documentKey} title={title} open={open} onOpenChange={setOpen} />
     </article>
   );

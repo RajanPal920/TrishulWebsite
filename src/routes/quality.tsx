@@ -68,16 +68,36 @@ function Quality() {
               {c.validity && (
                 <p className="mt-3 text-xs font-medium text-foreground">{c.validity}</p>
               )}
-              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1">
-                {c.documentKey && <DownloadLink documentKey={c.documentKey} title={c.name} />}
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border/40">
+                {c.documentKey && (
+                  <>
+                    <a
+                      href={`/certificates/${c.documentKey}.pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-[36px] items-center text-xs font-semibold text-primary hover:underline"
+                      title={`Open ${c.name} in browser`}
+                    >
+                      View PDF ↗
+                    </a>
+                    <a
+                      href={`/certificates/${c.documentKey}.pdf`}
+                      download={`${c.documentKey}.pdf`}
+                      className="inline-flex min-h-[36px] items-center text-xs font-medium text-muted-foreground hover:text-foreground"
+                      title={`Download ${c.name}`}
+                    >
+                      Download ↓
+                    </a>
+                  </>
+                )}
                 {c.verify && (
                   <a
                     href={c.verify}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex min-h-[44px] items-center text-xs font-semibold text-primary hover:underline"
+                    className="inline-flex min-h-[36px] items-center text-xs font-semibold text-muted-foreground hover:text-primary hover:underline ml-auto"
                   >
-                    Verify →
+                    Verify Portal →
                   </a>
                 )}
               </div>
