@@ -8,15 +8,18 @@ import { requireAuth } from '../middleware/auth.js';
 const router = express.Router();
 const googleClient = new OAuth2Client();
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  path: '/',
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-};
+function getCookieOptions(req) {
+  const isHttps = req ? (req.secure || req.headers['x-forwarded-proto'] === 'https') : false;
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
+}
 
-async function createSession(userId, res) {
+async function createSession(userId, res, req) {
   const sessionId = crypto.randomUUID();
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -27,7 +30,17 @@ async function createSession(userId, res) {
     [sessionId, userId, token, expiresAt]
   );
 
-  res.cookie('trishul_session', token, COOKIE_OPTIONS);
+  // Also mirror into sqlite if available
+  if (sqliteDb) {
+    sqliteDb.run(
+      `INSERT OR IGNORE INTO user_sessions (id, user_id, token, expires_at)
+       VALUES (?, ?, ?, ?)`,
+      [sessionId, userId, token, expiresAt],
+      () => {}
+    );
+  }
+
+  res.cookie('trishul_session', token, getCookieOptions(req));
   return token;
 }
 
@@ -65,9 +78,77 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existing = await get('SELECT id FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+    const existing = await get(
+      'SELECT id, email, password_hash, full_name, company, phone, role, status, created_at FROM users WHERE LOWER(email) = ?',
+      [cleanEmail]
+    );
+
     if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+      if (!existing.password_hash) {
+        // Account exists from Google OAuth or guest lead without a password set!
+        // Allow customer to set their password now and activate password login
+        const passwordHash = await bcrypt.hash(password.trim(), 10);
+        const now = new Date().toISOString();
+        await run(
+          `UPDATE users
+           SET password_hash = ?,
+               full_name = COALESCE(NULLIF(?, ''), full_name),
+               company = COALESCE(?, company),
+               phone = COALESCE(?, phone),
+               status = 'active',
+               login_method = 'password',
+               updated_at = ?
+           WHERE id = ?`,
+          [passwordHash, name, cleanCompany || null, cleanPhone || null, now, existing.id]
+        );
+
+        if (sqliteDb) {
+          sqliteDb.run(
+            `UPDATE users
+             SET password_hash = ?,
+                 full_name = COALESCE(NULLIF(?, ''), full_name),
+                 company = COALESCE(?, company),
+                 phone = COALESCE(?, phone),
+                 status = 'active',
+                 login_method = 'password',
+                 updated_at = ?
+             WHERE id = ?`,
+            [passwordHash, name, cleanCompany || null, cleanPhone || null, now, existing.id],
+            () => {}
+          );
+        }
+
+        const token = await createSession(existing.id, res, req);
+
+        // Link any guest RFQs
+        await run(
+          'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
+          [existing.id, cleanEmail]
+        ).catch(() => {});
+
+        console.log(`[Register] Activated password login for existing account: ${cleanEmail}`);
+
+        const user = {
+          id: existing.id,
+          email: cleanEmail,
+          fullName: name || existing.full_name,
+          full_name: name || existing.full_name,
+          company: cleanCompany || existing.company || null,
+          phone: cleanPhone || existing.phone || null,
+          role: existing.role || 'customer',
+          avatarUrl: null,
+          createdAt: existing.created_at || now,
+        };
+
+        return res.status(200).json({
+          success: true,
+          message: 'Password set and account activated successfully.',
+          user,
+          token,
+        });
+      }
+
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in below.' });
     }
 
     const passwordHash = await bcrypt.hash(password.trim(), 10);
@@ -90,13 +171,15 @@ router.post('/register', async (req, res) => {
       );
     }
 
-    const token = await createSession(userId, res);
+    const token = await createSession(userId, res, req);
 
     // Link any previous guest RFQs to this new account
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [userId, cleanEmail]
     ).catch(() => {});
+
+    console.log(`[Register] Created new customer account: ${cleanEmail} (${name})`);
 
     const user = {
       id: userId,
@@ -181,8 +264,16 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    if (!user || !user.password_hash) {
+    if (!user) {
+      console.warn(`[Login] User not found: ${cleanEmail}`);
       return res.status(401).json({ error: 'Invalid work email or password.' });
+    }
+
+    if (!user.password_hash) {
+      console.warn(`[Login] User ${cleanEmail} has null password_hash`);
+      return res.status(401).json({
+        error: 'This account was registered via Google Sign-In and does not have a password set. Please sign in with Google or use Create Account to set a password.',
+      });
     }
 
     if (user.status && user.status.toLowerCase() === 'inactive') {
@@ -191,6 +282,7 @@ router.post('/login', async (req, res) => {
 
     const matches = await bcrypt.compare(password.trim(), user.password_hash);
     if (!matches) {
+      console.warn(`[Login] Password mismatch for: ${cleanEmail}`);
       return res.status(401).json({ error: 'Invalid work email or password.' });
     }
 
@@ -207,13 +299,15 @@ router.post('/login', async (req, res) => {
       [activityId, user.id, ip, userAgent, now]
     ).catch(() => {});
 
-    const token = await createSession(user.id, res);
+    const token = await createSession(user.id, res, req);
 
     // Link any previous guest RFQs to this account
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [user.id, cleanEmail]
     ).catch(() => {});
+
+    console.log(`[Login] Successful sign-in for: ${cleanEmail} (${user.role})`);
 
     return res.json({
       success: true,
@@ -483,7 +577,7 @@ router.get('/google/callback', async (req, res) => {
       [actId, userId, clientIp, clientAgent, now]
     ).catch(() => {});
 
-    await createSession(userId, res);
+    await createSession(userId, res, req);
 
     // Link any previous guest RFQs to this account
     await run(
@@ -638,7 +732,7 @@ router.post('/google', async (req, res) => {
       [actId, userId, clientIp, clientAgent, now]
     ).catch(() => {});
 
-    const token = await createSession(userId, res);
+    const token = await createSession(userId, res, req);
 
     // Link any previous guest RFQs to this account
     await run(
@@ -691,9 +785,20 @@ router.get('/me', (req, res) => {
 router.post('/logout', async (req, res) => {
   try {
     if (req.sessionId) {
-      await run('DELETE FROM user_sessions WHERE id = ?', [req.sessionId]);
+      await run('DELETE FROM user_sessions WHERE id = ?', [req.sessionId]).catch(() => {});
     } else if (req.user) {
-      await run('DELETE FROM user_sessions WHERE user_id = ?', [req.user.id]);
+      await run('DELETE FROM user_sessions WHERE user_id = ?', [req.user.id]).catch(() => {});
+    }
+
+    const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.split(' ')[1]?.trim()
+      : null;
+    if (bearerToken) {
+      await run('DELETE FROM user_sessions WHERE token = ?', [bearerToken]).catch(() => {});
+    }
+
+    if (req.cookies && req.cookies.trishul_session) {
+      await run('DELETE FROM user_sessions WHERE token = ?', [req.cookies.trishul_session]).catch(() => {});
     }
   } catch (err) {
     console.error('[Logout cleanup error]:', err);

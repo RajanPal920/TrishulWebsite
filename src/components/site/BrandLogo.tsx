@@ -23,7 +23,7 @@ export function BrandLogo({ className = "", priority = false, style }: BrandLogo
       height={143}
       fetchPriority={priority ? "high" : "auto"}
       style={style}
-      className={cn("h-auto w-auto object-contain select-none transition-transform duration-200", className)}
+      className={cn("max-h-full max-w-full object-contain select-none transition-transform duration-200", className)}
     />
   );
 }

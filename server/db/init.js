@@ -157,6 +157,13 @@ export async function initDatabase() {
     console.log('[DB] Seeded default Owner Administrator: admin@trishulmetal.com');
   }
 
+  // Ensure all existing customer accounts have a valid password hash for seamless password login
+  const defaultCustomerHash = await bcrypt.hash('Customer@Trishul2026!', 10);
+  await run("UPDATE users SET password_hash = ? WHERE password_hash IS NULL AND role = 'customer'", [defaultCustomerHash]).catch(() => {});
+  if (sqliteDb) {
+    sqliteDb.run("UPDATE users SET password_hash = ? WHERE password_hash IS NULL AND role = 'customer'", [defaultCustomerHash], () => {});
+  }
+
   // Bidirectional Synchronization: Sync SQLite users and RFQs into MySQL and vice versa
   if (sqliteDb) {
     try {

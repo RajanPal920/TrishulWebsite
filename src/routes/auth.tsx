@@ -82,7 +82,7 @@ function AuthPage() {
     setBusy(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       setEmail("");
       setPassword("");
       void navigate({ to: targetUrl });
@@ -99,20 +99,24 @@ function AuthPage() {
     setError(null);
     setNotice(null);
 
-    if (!fullName.trim() || fullName.trim().length < 2) {
+    const cleanFullName = fullName.trim();
+    const cleanEmail = email.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanFullName || cleanFullName.length < 2) {
       setError("Please enter your full name (minimum 2 characters).");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim() || !emailRegex.test(email.trim())) {
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
       setError("Please enter a valid work email address (e.g. name@company.com).");
       return;
     }
 
-    if (phone.trim()) {
+    if (cleanPhone) {
       const phoneRegex = /^\+?[0-9\s\-()]{7,25}$/;
-      if (!phoneRegex.test(phone.trim())) {
+      if (!phoneRegex.test(cleanPhone)) {
         setError("Please enter a valid phone number with country code (e.g. +91 98200 12345).");
         return;
       }
@@ -132,10 +136,10 @@ function AuthPage() {
 
     try {
       await register({
-        fullName,
-        company,
-        email,
-        phone,
+        fullName: cleanFullName,
+        company: company.trim(),
+        email: cleanEmail,
+        phone: cleanPhone,
         password,
         confirmPassword,
       });
@@ -145,7 +149,13 @@ function AuthPage() {
     } catch (err: any) {
       setPassword("");
       setConfirmPassword("");
-      setError(err?.message || "Registration failed. Please check your information.");
+      const msg = err?.message || "Registration failed. Please check your information.";
+      if (msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("sign in")) {
+        setMode("signin");
+        setNotice("An account with this email already exists. Please enter your password to sign in.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }

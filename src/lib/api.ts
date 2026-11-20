@@ -168,6 +168,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
+  // Dual-resilience session restoration: Send Bearer token if stored in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const storedToken = localStorage.getItem('trishul_session_token');
+      if (storedToken && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${storedToken}`);
+      }
+    } catch {
+      // safe fallback if storage is restricted
+    }
+  }
+
   const response = await fetch(path, {
     ...options,
     headers,
@@ -183,6 +195,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
+    // If unauthorized on protected me check, clean up stale token
+    if (response.status === 401 && typeof window !== 'undefined' && path.includes('/api/auth/me')) {
+      try {
+        localStorage.removeItem('trishul_session_token');
+      } catch {}
+    }
     const errorMsg = data?.error || data?.message || `Request failed with status ${response.status}`;
     throw new ApiError(response.status, errorMsg, data);
   }
@@ -200,17 +218,29 @@ export const api = {
       company?: string;
       phone?: string;
     }): Promise<{ success: boolean; user: User }> {
-      return request<{ success: boolean; user: User }>('/api/auth/register', {
+      const res = await request<{ success: boolean; user: User; token?: string }>('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      if (res.token && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('trishul_session_token', res.token);
+        } catch {}
+      }
+      return res;
     },
 
     async login(payload: { email: string; password: string }): Promise<{ success: boolean; user: User }> {
-      return request<{ success: boolean; user: User }>('/api/auth/login', {
+      const res = await request<{ success: boolean; user: User; token?: string }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      if (res.token && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('trishul_session_token', res.token);
+        } catch {}
+      }
+      return res;
     },
 
     async google(payload: {
@@ -219,21 +249,43 @@ export const api = {
       providerToken?: string;
       userInfo?: { email: string; name?: string; picture?: string; sub?: string };
     }): Promise<{ success: boolean; user: User }> {
-      return request<{ success: boolean; user: User }>('/api/auth/google', {
+      const res = await request<{ success: boolean; user: User; token?: string }>('/api/auth/google', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      if (res.token && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('trishul_session_token', res.token);
+        } catch {}
+      }
+      return res;
     },
 
     async me(): Promise<{ authenticated: boolean; user: User | null }> {
       try {
-        return await request<{ authenticated: boolean; user: User | null }>('/api/auth/me');
+        const res = await request<{ authenticated: boolean; user: User | null }>('/api/auth/me');
+        if (!res.authenticated && typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('trishul_session_token');
+          } catch {}
+        }
+        return res;
       } catch {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('trishul_session_token');
+          } catch {}
+        }
         return { authenticated: false, user: null };
       }
     },
 
     async logout(): Promise<{ success: boolean }> {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('trishul_session_token');
+        } catch {}
+      }
       return request<{ success: boolean }>('/api/auth/logout', {
         method: 'POST',
       });

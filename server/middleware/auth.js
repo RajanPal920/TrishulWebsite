@@ -7,7 +7,7 @@ export async function authenticateToken(req, res, next) {
     if (req.cookies && req.cookies.trishul_session) {
       token = req.cookies.trishul_session;
     } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
+      token = req.headers.authorization.split(' ')[1]?.trim();
     }
 
     if (!token) {
@@ -18,7 +18,7 @@ export async function authenticateToken(req, res, next) {
     // Look up session in user_sessions table
     const session = await get(
       `SELECT s.id as session_id, s.token, s.expires_at,
-              u.id, u.email, u.full_name, u.company, u.phone, u.role, u.avatar_url, u.last_login_at, u.created_at
+              u.id as user_id, u.email, u.full_name, u.company, u.phone, u.role, u.status, u.avatar_url, u.last_login_at, u.created_at
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ?`,
@@ -30,24 +30,40 @@ export async function authenticateToken(req, res, next) {
       return next();
     }
 
-    // Check expiration
-    const expiresAt = new Date(session.expires_at);
-    if (expiresAt < new Date()) {
+    // Check expiration safely across MySQL Date objects and SQLite ISO strings
+    const rawExp = session.expires_at;
+    const expiresAt =
+      rawExp instanceof Date
+        ? rawExp
+        : new Date(
+            typeof rawExp === 'string' && rawExp.includes(' ') && !rawExp.includes('T')
+              ? rawExp.replace(' ', 'T') + 'Z'
+              : rawExp
+          );
+
+    if (!isNaN(expiresAt.getTime()) && expiresAt < new Date()) {
       // Session has expired, remove it
-      await run('DELETE FROM user_sessions WHERE id = ?', [session.session_id]);
+      await run('DELETE FROM user_sessions WHERE id = ?', [session.session_id]).catch(() => {});
+      req.user = null;
+      return next();
+    }
+
+    // Check user account status
+    if (session.status && session.status.toLowerCase() === 'inactive') {
       req.user = null;
       return next();
     }
 
     // Attach user (omit password_hash)
     req.user = {
-      id: session.id,
+      id: session.user_id,
       email: session.email,
       fullName: session.full_name,
       full_name: session.full_name,
       company: session.company,
       phone: session.phone,
-      role: session.role,
+      role: session.role || 'customer',
+      status: session.status || 'active',
       avatarUrl: session.avatar_url,
       lastLoginAt: session.last_login_at,
       createdAt: session.created_at,
