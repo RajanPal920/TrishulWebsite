@@ -206,6 +206,9 @@ function ResetPasswordPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Enter new password (min 8 characters)"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={fieldClass}
                     autoComplete="new-password"
                   />
@@ -224,6 +227,9 @@ function ResetPasswordPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={fieldClass}
                     autoComplete="new-password"
                   />

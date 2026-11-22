@@ -181,10 +181,10 @@ function heroForPath(pathname: string): HeroDetails | null {
   if (segments[0] === "industries") {
     const industry = segments[1] ? industryBySlug(segments[1]) : undefined;
     return {
-      src: industry?.image || "/images/heroes/hero-industries.jpg",
+      src: "/images/heroes/hero-industries.jpg",
       eyebrow: "CRITICAL INDUSTRY APPLICATIONS",
       title: industry ? `${industry.name} Solutions` : "Critical Industry Applications",
-      alt: industry ? industry.name : "Critical industry applications",
+      alt: industry ? `${industry.name} Solutions — Critical Industry Applications` : "Critical industry applications",
     };
   }
 

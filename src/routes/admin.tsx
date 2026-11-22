@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Clock,
   Eye,
+  EyeOff,
   Edit2,
   Phone,
   Mail,
@@ -119,6 +120,7 @@ function AdminConsolePage() {
   // Admin login credentials (for non-authenticated state)
   const [adminUsername, setAdminUsername] = useState("admin");
   const [adminPassword, setAdminPassword] = useState("");
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -218,14 +220,26 @@ function AdminConsolePage() {
     setLoginError(null);
     setLoginBusy(true);
     try {
-      const loggedUser = await login(adminUsername, adminPassword);
+      const cleanUsername = adminUsername.trim().toLowerCase();
+      const loggedUser = await login(cleanUsername, adminPassword);
       setAdminPassword("");
       if (loggedUser.role !== "admin") {
         setLoginError("This account does not have Owner Administrator privileges.");
       }
     } catch (err: any) {
       setAdminPassword("");
-      setLoginError(err?.message || "Invalid administrator credentials.");
+      const status = err?.status;
+      const code = err?.data?.code;
+      const msg = err?.data?.error || err?.message || "";
+      if (status === 401 || code === "INVALID_CREDENTIALS") {
+        setLoginError("Incorrect administrator username or password. Please check your credentials and try again.");
+      } else if (status === 404 || code === "ACCOUNT_NOT_FOUND") {
+        setLoginError("Administrator account not found. Please verify your username.");
+      } else if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setLoginError("Network connection error: Unable to connect to authentication server. Please check your connection.");
+      } else {
+        setLoginError(msg || "Failed to authenticate administrator. Please check your credentials and try again.");
+      }
     } finally {
       setLoginBusy(false);
     }
@@ -560,28 +574,46 @@ function AdminConsolePage() {
           <form onSubmit={handleAdminLogin} className="mt-6 space-y-4">
             <div>
               <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                Administrator Username
+                Administrator Username / Email
               </label>
               <input
                 type="text"
                 required
                 value={adminUsername}
                 onChange={(e) => setAdminUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="admin or admin@trishulmetal.com"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="username"
                 className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
               />
             </div>
 
             <div>
               <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Password</label>
-              <input
-                type="password"
-                required
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="Enter administrator password"
-                className="mt-1.5 w-full rounded-sm border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
-              />
+              <div className="relative mt-1.5">
+                <input
+                  type={showAdminPassword ? "text" : "password"}
+                  required
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Enter administrator password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="current-password"
+                  className="w-full rounded-sm border border-border bg-card px-3.5 py-2.5 pr-10 text-sm text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword(!showAdminPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors"
+                  aria-label={showAdminPassword ? "Hide password" : "Show password"}
+                >
+                  {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <button

@@ -27,18 +27,56 @@ export function getEmailTransporter() {
 }
 
 export function getDefaultFromAddress() {
-  return process.env.EMAIL_FROM || '"Trishul Metals & Alloys" <notifications@trishulmetal.com>';
+  return (
+    process.env.EMAIL_FROM ||
+    (process.env.RESEND_API_KEY ? 'Trishul Metals <onboarding@resend.dev>' : '"Trishul Metals & Alloys" <notifications@trishulmetal.com>')
+  );
 }
 
 /**
  * Universal email dispatch helper.
- * If SMTP credentials exist, delivers real email.
- * If in dev or unconfigured, safely logs full email details and returns delivery status.
+ * 1. If RESEND_API_KEY is present, sends via Resend REST API (ideal for Vercel serverless).
+ * 2. If SMTP credentials exist, delivers via Nodemailer SMTP.
+ * 3. If in dev or unconfigured, safely logs full email details and returns delivery status.
  */
 export async function sendEmail({ to, subject, html, text }) {
   const from = getDefaultFromAddress();
-  const transporter = getEmailTransporter();
 
+  // 1. Resend REST API
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: Array.isArray(to) ? to : [to],
+          subject,
+          html,
+          text: text || html.replace(/<[^>]+>/g, ' '),
+        }),
+      });
+
+      const data = await resp.json();
+      if (resp.ok) {
+        console.log(`[Email Service] Delivered via Resend API to ${to}: ${data.id}`);
+        return { success: true, messageId: data.id, mode: 'resend' };
+      } else {
+        console.error(`[Email Service Error] Resend API rejected email to ${to}:`, data);
+        return { success: false, error: data.message || 'Resend API rejected request', mode: 'resend_failed' };
+      }
+    } catch (err) {
+      console.error(`[Email Service Error] Resend fetch exception for ${to}:`, err.message);
+      return { success: false, error: err.message, mode: 'resend_failed' };
+    }
+  }
+
+  // 2. Nodemailer SMTP
+  const transporter = getEmailTransporter();
   if (transporter) {
     try {
       const info = await transporter.sendMail({
@@ -56,8 +94,8 @@ export async function sendEmail({ to, subject, html, text }) {
     }
   }
 
-  // Fallback: Safe audit logging in development / staging
-  console.log(`\n================= [EMAIL NOTIFICATION DISPATCH] =================`);
+  // 3. Fallback: Safe audit logging in development / staging
+  console.log(`\n================= [EMAIL NOTIFICATION DISPATCH (LOCAL/DEV)] =================`);
   console.log(`From:    ${from}`);
   console.log(`To:      ${to}`);
   console.log(`Subject: ${subject}`);
@@ -66,7 +104,7 @@ export async function sendEmail({ to, subject, html, text }) {
   console.log(text || html.replace(/<[^>]+>/g, ' '));
   console.log(`=================================================================\n`);
 
-  return { success: true, messageId: `local-${crypto.randomUUID()}`, mode: 'logged_dev' };
+  return { success: true, messageId: `local-${crypto.randomUUID()}`, mode: 'unconfigured_dev' };
 }
 
 /**
@@ -226,24 +264,24 @@ export async function sendRequestStatusUpdateEmail({
   const portalUrl = `${baseUrl.replace(/\/+$/, '')}/portal`;
   const normalizedStatus = (newStatus || '').toLowerCase();
 
-  let subject = `Update Regarding Your Request — Trishul Metals & Alloys [${reference}]`;
+  let subject = `Update Regarding Your Trishul Metals & Alloys Request [${reference}]`;
   let badgeClass = 'status-pending';
   let statusHeadline = `Your request status has been updated to: <strong>${newStatus}</strong>`;
 
   if (normalizedStatus.includes('progress')) {
-    subject = `Your Request Is Being Processed — Trishul Metals & Alloys [${reference}]`;
+    subject = 'Your Trishul Metals & Alloys Request Is Now In Progress';
     badgeClass = 'status-progress';
     statusHeadline = 'Your request is currently being reviewed and processed by our export engineering desk.';
   } else if (normalizedStatus.includes('awaiting') || normalizedStatus.includes('customer')) {
-    subject = `Additional Information Required — Trishul Metals & Alloys [${reference}]`;
+    subject = 'Additional Information Required for Your Request';
     badgeClass = 'status-awaiting';
     statusHeadline = 'Additional technical or commercial information is required to proceed with your enquiry.';
   } else if (normalizedStatus.includes('resolve') || normalizedStatus.includes('closed') || normalizedStatus.includes('quoted')) {
-    subject = `Your Request Has Been Resolved — Trishul Metals & Alloys [${reference}]`;
+    subject = 'Your Trishul Metals & Alloys Request Has Been Resolved';
     badgeClass = 'status-resolved';
     statusHeadline = 'Your request has been marked as resolved.';
   } else if (normalizedStatus.includes('reject') || normalizedStatus.includes('cancel')) {
-    subject = `Update Regarding Your Request — Trishul Metals & Alloys [${reference}]`;
+    subject = 'Update Regarding Your Trishul Metals & Alloys Request';
     badgeClass = 'status-rejected';
     statusHeadline = 'An update has been posted regarding your request.';
   }
@@ -305,7 +343,7 @@ export async function sendAdminReplyEmail({
   baseUrl = 'https://www.trishulmetal.com',
 }) {
   const portalUrl = `${baseUrl.replace(/\/+$/, '')}/portal`;
-  const subject = `New Response to Your Request — Trishul Metals & Alloys [${reference}]`;
+  const subject = 'New Response to Your Trishul Metals & Alloys Request';
 
   const html = renderBrandedEmailTemplate({
     title: subject,

@@ -221,7 +221,10 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email / Username and password are required.' });
     }
 
-    const cleanEmail = rawEmail === 'admin' ? 'admin@trishulmetal.com' : rawEmail;
+    const cleanEmail =
+      rawEmail === 'admin' || rawEmail === 'administrator'
+        ? 'admin@trishulmetal.com'
+        : rawEmail;
 
     let user = await get(
       `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
@@ -229,7 +232,7 @@ router.post('/login', async (req, res) => {
       [cleanEmail, cleanEmail]
     );
 
-    if (!user && rawEmail === 'admin') {
+    if (!user && (rawEmail === 'admin' || rawEmail === 'administrator' || rawEmail.startsWith('admin@'))) {
       user = await get(
         `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
          FROM users WHERE role = 'admin' LIMIT 1`
@@ -291,7 +294,11 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const matches = await bcrypt.compare(password.trim(), user.password_hash);
+    const trimmedPassword = password.trim();
+    let matches = await bcrypt.compare(password, user.password_hash);
+    if (!matches && trimmedPassword !== password) {
+      matches = await bcrypt.compare(trimmedPassword, user.password_hash);
+    }
     if (!matches) {
       console.warn(`[Login] Password mismatch for: ${cleanEmail}`);
       return res.status(401).json({

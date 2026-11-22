@@ -67,7 +67,11 @@ function AuthPage() {
   // If already authenticated, redirect to destination
   useEffect(() => {
     if (user) {
-      void navigate({ to: targetUrl });
+      if (user.role === "admin") {
+        void navigate({ to: "/admin" });
+      } else {
+        void navigate({ to: targetUrl });
+      }
     }
   }, [user, navigate, targetUrl]);
 
@@ -96,10 +100,14 @@ function AuthPage() {
     const cleanEmail = email.trim();
 
     try {
-      await login(cleanEmail, password);
+      const loggedUser = await login(cleanEmail, password);
       setEmail("");
       setPassword("");
-      void navigate({ to: targetUrl });
+      if (loggedUser.role === "admin") {
+        void navigate({ to: "/admin" });
+      } else {
+        void navigate({ to: targetUrl });
+      }
     } catch (err: any) {
       setPassword("");
       const status = err?.status;
@@ -317,6 +325,9 @@ function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter work email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className={fieldClass}
                   autoComplete="email"
                 />
@@ -332,6 +343,9 @@ function AuthPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className={fieldClass}
                   autoComplete="current-password"
                 />

@@ -179,13 +179,20 @@ router.put('/rfqs/:id', async (req, res) => {
     const now = new Date().toISOString();
 
     const existing = await get(
-      'SELECT id, reference, company, contact_name, email, phone, status, admin_response, admin_notes, user_id FROM rfq_requests WHERE id = ? OR reference = ?',
+      `SELECT r.id, r.reference, r.company, r.contact_name, r.email, r.phone, r.status, r.admin_response, r.admin_notes, r.user_id,
+              u.email as user_email, u.full_name as user_name
+       FROM rfq_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.id = ? OR r.reference = ?`,
       [req.params.id, req.params.id]
     );
 
     if (!existing) {
       return res.status(404).json({ error: 'Inquiry / RFQ not found.' });
     }
+
+    const recipientEmail = (existing.email || existing.user_email || '').trim().toLowerCase();
+    const customerDisplayName = existing.contact_name || existing.user_name || existing.company || 'Valued Customer';
 
     const oldStatus = existing.status || 'Pending';
     const newStatus = status ? status.trim() : oldStatus;
@@ -224,14 +231,14 @@ router.put('/rfqs/:id', async (req, res) => {
     // 2. Dispatch Customer Email Notification if requested and status changed or customer response provided
     const shouldNotify = notify_customer !== false && (hasStatusChanged || hasNewCustomerResponse);
 
-    if (shouldNotify && existing.email) {
+    if (shouldNotify && recipientEmail) {
       const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
       const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
 
       try {
         emailResult = await sendRequestStatusUpdateEmail({
-          to: existing.email,
-          customerName: existing.contact_name || existing.company || 'Valued Customer',
+          to: recipientEmail,
+          customerName: customerDisplayName,
           reference: existing.reference,
           oldStatus,
           newStatus,
@@ -322,13 +329,20 @@ router.post('/rfqs/:id/reply', async (req, res) => {
     }
 
     const existing = await get(
-      'SELECT id, reference, company, contact_name, email, status FROM rfq_requests WHERE id = ? OR reference = ?',
+      `SELECT r.id, r.reference, r.company, r.contact_name, r.email, r.status, r.user_id,
+              u.email as user_email, u.full_name as user_name
+       FROM rfq_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.id = ? OR r.reference = ?`,
       [req.params.id, req.params.id]
     );
 
     if (!existing) {
       return res.status(404).json({ error: 'Request not found.' });
     }
+
+    const recipientEmail = (existing.email || existing.user_email || '').trim().toLowerCase();
+    const customerDisplayName = existing.contact_name || existing.user_name || existing.company || 'Customer';
 
     const cleanMsg = message.trim();
     const newStatus = status ? status.trim() : (existing.status || 'In Progress');
@@ -345,10 +359,11 @@ router.post('/rfqs/:id/reply', async (req, res) => {
     const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
 
     let emailSent = false;
-    if (existing.email) {
-      const emailResult = await sendAdminReplyEmail({
-        to: existing.email,
-        customerName: existing.contact_name || existing.company || 'Customer',
+    let emailResult = null;
+    if (recipientEmail) {
+      emailResult = await sendAdminReplyEmail({
+        to: recipientEmail,
+        customerName: customerDisplayName,
         reference: existing.reference,
         currentStatus: newStatus,
         adminMessage: cleanMsg,

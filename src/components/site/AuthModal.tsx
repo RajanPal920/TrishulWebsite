@@ -254,6 +254,10 @@ export function AuthModal() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter work email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="email"
                   className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
@@ -269,6 +273,10 @@ export function AuthModal() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="current-password"
                   className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
                 />
               </div>
