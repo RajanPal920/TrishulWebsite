@@ -27,20 +27,52 @@ export function getEmailTransporter() {
 }
 
 export function getDefaultFromAddress() {
-  return (
-    process.env.EMAIL_FROM ||
-    (process.env.RESEND_API_KEY ? 'Trishul Metals <onboarding@resend.dev>' : '"Trishul Metals & Alloys" <notifications@trishulmetal.com>')
-  );
+  if (process.env.EMAIL_FROM) {
+    return process.env.EMAIL_FROM;
+  }
+  if (process.env.RESEND_API_KEY) {
+    return process.env.RESEND_FROM || 'Trishul Metals & Alloys <onboarding@resend.dev>';
+  }
+  if (process.env.SMTP_USER) {
+    return `"Trishul Metals & Alloys" <${process.env.SMTP_USER}>`;
+  }
+  return '"Trishul Metals & Alloys" <export@trishulmetal.com>';
 }
 
 /**
- * Universal email dispatch helper.
- * 1. If RESEND_API_KEY is present, sends via Resend REST API (ideal for Vercel serverless).
- * 2. If SMTP credentials exist, delivers via Nodemailer SMTP.
- * 3. If in dev or unconfigured, safely logs full email details and returns delivery status.
+ * Centralized public production domain helper.
+ * Strictly avoids localhost in customer-facing emails.
+ */
+export function getPublicAppUrl(req) {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, '');
+  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  if (req) {
+    const origin = req.headers?.origin || (req.headers?.referer ? new URL(req.headers.referer).origin : null);
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      return origin.replace(/\/+$/, '');
+    }
+  }
+
+  return 'https://trishul-website.vercel.app';
+}
+
+/**
+ * Universal real email dispatch service.
+ * Delivers via Resend REST API or Nodemailer SMTP (e.g. Gmail / Google Workspace / custom SMTP).
+ * Returns real success/failure without terminal simulation masquerading as delivery.
  */
 export async function sendEmail({ to, subject, html, text }) {
   const from = getDefaultFromAddress();
+
+  const recipientList = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
+  if (recipientList.length === 0) {
+    return { success: false, error: 'Recipient email address is missing or invalid.', mode: 'invalid_recipient' };
+  }
+  const cleanTo = recipientList.length === 1 ? recipientList[0] : recipientList;
 
   // 1. Resend REST API
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -54,7 +86,7 @@ export async function sendEmail({ to, subject, html, text }) {
         },
         body: JSON.stringify({
           from,
-          to: Array.isArray(to) ? to : [to],
+          to: Array.isArray(cleanTo) ? cleanTo : [cleanTo],
           subject,
           html,
           text: text || html.replace(/<[^>]+>/g, ' '),
@@ -63,48 +95,47 @@ export async function sendEmail({ to, subject, html, text }) {
 
       const data = await resp.json();
       if (resp.ok) {
-        console.log(`[Email Service] Delivered via Resend API to ${to}: ${data.id}`);
+        console.log(`[Email Service] Delivered via Resend to ${Array.isArray(cleanTo) ? cleanTo.join(', ') : cleanTo}: ${data.id}`);
         return { success: true, messageId: data.id, mode: 'resend' };
       } else {
-        console.error(`[Email Service Error] Resend API rejected email to ${to}:`, data);
-        return { success: false, error: data.message || 'Resend API rejected request', mode: 'resend_failed' };
+        const errorMsg = data?.message || JSON.stringify(data);
+        console.error(`[Email Service Error] Resend API rejected email to ${cleanTo}:`, errorMsg);
+        return { success: false, error: `Resend API Error: ${errorMsg}`, mode: 'resend_failed' };
       }
     } catch (err) {
-      console.error(`[Email Service Error] Resend fetch exception for ${to}:`, err.message);
-      return { success: false, error: err.message, mode: 'resend_failed' };
+      console.error(`[Email Service Error] Resend fetch exception:`, err.message);
+      return { success: false, error: `Resend Network Error: ${err.message}`, mode: 'resend_failed' };
     }
   }
 
-  // 2. Nodemailer SMTP
+  // 2. Nodemailer SMTP (supports Gmail, Google Workspace, SendGrid, Amazon SES, cPanel)
   const transporter = getEmailTransporter();
   if (transporter) {
     try {
       const info = await transporter.sendMail({
         from,
-        to,
+        to: cleanTo,
         subject,
         html,
         text: text || html.replace(/<[^>]+>/g, ' '),
       });
-      console.log(`[Email Service] Delivered via SMTP to ${to}: ${info.messageId}`);
+      console.log(`[Email Service] Delivered via SMTP to ${cleanTo}: ${info.messageId}`);
       return { success: true, messageId: info.messageId, mode: 'smtp' };
     } catch (err) {
-      console.error(`[Email Service Error] SMTP failed to send to ${to}:`, err.message);
-      return { success: false, error: err.message, mode: 'smtp_failed' };
+      console.error(`[Email Service Error] SMTP delivery failure to ${cleanTo}:`, err.message);
+      return { success: false, error: `SMTP Delivery Error: ${err.message}`, mode: 'smtp_failed' };
     }
   }
 
-  // 3. Fallback: Safe audit logging in development / staging
-  console.log(`\n================= [EMAIL NOTIFICATION DISPATCH (LOCAL/DEV)] =================`);
-  console.log(`From:    ${from}`);
-  console.log(`To:      ${to}`);
-  console.log(`Subject: ${subject}`);
-  console.log(`Time:    ${new Date().toISOString()}`);
-  console.log(`-----------------------------------------------------------------`);
-  console.log(text || html.replace(/<[^>]+>/g, ' '));
-  console.log(`=================================================================\n`);
+  // 3. NO EMAIL SERVICE CONFIGURED: Return actual failure status (never simulate fake delivery)
+  const unconfiguredMsg = 'Email delivery provider is not configured. Please configure SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) or RESEND_API_KEY in server environment variables.';
+  console.error(`[Email Service Error] Delivery aborted to ${cleanTo}: ${unconfiguredMsg}`);
 
-  return { success: true, messageId: `local-${crypto.randomUUID()}`, mode: 'unconfigured_dev' };
+  return {
+    success: false,
+    error: unconfiguredMsg,
+    mode: 'unconfigured',
+  };
 }
 
 /**
@@ -164,8 +195,9 @@ function renderBrandedEmailTemplate({ title, greeting, intro, contentHtml, actio
 /**
  * 1. Password Reset Email
  */
-export async function sendPasswordResetEmail({ to, customerName, resetToken, baseUrl = 'https://www.trishulmetal.com' }) {
-  const resetUrl = `${baseUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(resetToken)}`;
+export async function sendPasswordResetEmail({ to, customerName, resetToken, baseUrl, req }) {
+  const publicUrl = baseUrl || getPublicAppUrl(req);
+  const resetUrl = `${publicUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(resetToken)}`;
   const subject = 'Reset Your Trishul Metals Account Password';
 
   const html = renderBrandedEmailTemplate({
@@ -205,8 +237,9 @@ export@trishulmetal.com | +91 79772 81567`;
 /**
  * 2. Email A — Request Received
  */
-export async function sendRequestReceivedEmail({ to, customerName, reference, summary, baseUrl = 'https://www.trishulmetal.com' }) {
-  const portalUrl = `${baseUrl.replace(/\/+$/, '')}/portal`;
+export async function sendRequestReceivedEmail({ to, customerName, reference, summary, baseUrl, req }) {
+  const publicUrl = baseUrl || getPublicAppUrl(req);
+  const portalUrl = `${publicUrl.replace(/\/+$/, '')}/portal`;
   const subject = `Your Request Has Been Received — Trishul Metals & Alloys [${reference}]`;
 
   const html = renderBrandedEmailTemplate({
@@ -259,31 +292,49 @@ export async function sendRequestStatusUpdateEmail({
   oldStatus,
   newStatus,
   adminMessage,
-  baseUrl = 'https://www.trishulmetal.com',
+  baseUrl,
+  req,
 }) {
-  const portalUrl = `${baseUrl.replace(/\/+$/, '')}/portal`;
-  const normalizedStatus = (newStatus || '').toLowerCase();
+  const publicUrl = baseUrl || getPublicAppUrl(req);
+  const portalUrl = `${publicUrl.replace(/\/+$/, '')}/portal`;
+  const normalizedStatus = (newStatus || '').toLowerCase().trim();
 
-  let subject = `Update Regarding Your Trishul Metals & Alloys Request [${reference}]`;
+  const formattedDate = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }) + ' IST';
+
+  let subject = `Your Request ${reference} Has Been Updated – Trishul Metals & Alloys`;
   let badgeClass = 'status-pending';
-  let statusHeadline = `Your request status has been updated to: <strong>${newStatus}</strong>`;
+  let statusHeadline = `Your request has been marked as <strong>${newStatus}</strong>.`;
 
-  if (normalizedStatus.includes('progress')) {
-    subject = 'Your Trishul Metals & Alloys Request Is Now In Progress';
+  if (normalizedStatus === 'pending') {
+    badgeClass = 'status-pending';
+    statusHeadline = 'Your request has been logged and is awaiting technical review.';
+  } else if (normalizedStatus.includes('review')) {
     badgeClass = 'status-progress';
-    statusHeadline = 'Your request is currently being reviewed and processed by our export engineering desk.';
-  } else if (normalizedStatus.includes('awaiting') || normalizedStatus.includes('customer')) {
-    subject = 'Additional Information Required for Your Request';
-    badgeClass = 'status-awaiting';
-    statusHeadline = 'Additional technical or commercial information is required to proceed with your enquiry.';
-  } else if (normalizedStatus.includes('resolve') || normalizedStatus.includes('closed') || normalizedStatus.includes('quoted')) {
-    subject = 'Your Trishul Metals & Alloys Request Has Been Resolved';
+    statusHeadline = 'Your request is currently under technical review by our engineering desk.';
+  } else if (normalizedStatus.includes('progress')) {
+    badgeClass = 'status-progress';
+    statusHeadline = 'Your request is actively in progress with our technical team.';
+  } else if (normalizedStatus.includes('approved')) {
     badgeClass = 'status-resolved';
-    statusHeadline = 'Your request has been marked as resolved.';
+    statusHeadline = 'Your quotation or request has been approved.';
+  } else if (
+    normalizedStatus.includes('completed') ||
+    normalizedStatus.includes('closed') ||
+    normalizedStatus.includes('resolved')
+  ) {
+    badgeClass = 'status-resolved';
+    statusHeadline = `Your request has been marked as <strong>${newStatus}</strong>.`;
   } else if (normalizedStatus.includes('reject') || normalizedStatus.includes('cancel')) {
-    subject = 'Update Regarding Your Trishul Metals & Alloys Request';
     badgeClass = 'status-rejected';
-    statusHeadline = 'An update has been posted regarding your request.';
+    statusHeadline = `Your request status has been updated to <strong>${newStatus}</strong>.`;
   }
 
   const html = renderBrandedEmailTemplate({
@@ -292,12 +343,25 @@ export async function sendRequestStatusUpdateEmail({
     intro: statusHeadline,
     contentHtml: `
       <div class="box">
-        <div style="margin-bottom: 10px;">
-          <strong style="color: #ffffff;">Request Reference:</strong> <span style="font-family: monospace; color: #d4af37; font-size: 14px;">${reference}</span>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <strong style="color: #ffffff;">Status:</strong> <span class="status-badge ${badgeClass}">${newStatus}</span>
-        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa; width: 140px;">Request ID:</td>
+            <td style="padding: 6px 0; font-family: monospace; font-weight: 700; color: #d4af37; font-size: 14px;">${reference}</td>
+          </tr>
+          ${oldStatus ? `
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Previous Status:</td>
+            <td style="padding: 6px 0; color: #71717a;">${oldStatus}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Current Status:</td>
+            <td style="padding: 6px 0;"><span class="status-badge ${badgeClass}">${newStatus}</span></td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Date &amp; Time:</td>
+            <td style="padding: 6px 0; color: #e4e4e7;">${formattedDate}</td>
+          </tr>
+        </table>
         ${adminMessage ? `
         <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid #2e3440;">
           <strong style="color: #ffffff; display: block; margin-bottom: 6px;">Message from Technical Desk:</strong>
@@ -306,22 +370,24 @@ export async function sendRequestStatusUpdateEmail({
           </div>
         </div>` : ''}
       </div>
+      <p class="paragraph">You can track your request anytime through your customer dashboard.</p>
     `,
     actionButton: {
-      label: 'Open Customer Dashboard',
+      label: 'Track Your Request',
       url: portalUrl,
     },
-    footerNotes: 'If you have any questions or wish to provide additional documents, please reply directly to this email or contact your assigned account desk.',
+    footerNotes: `Direct dashboard link: <a href="${portalUrl}" style="color: #d4af37; word-break: break-all;">${portalUrl}</a>`,
   });
 
   const text = `Hello ${customerName || 'Customer'},
 
-${statusHeadline.replace(/<[^>]+>/g, '')}
+Your request has been marked as ${newStatus}.
 
 Request ID: ${reference}
-Current Status: ${newStatus}
-${adminMessage ? `Message from Technical Desk:\n${adminMessage}\n` : ''}
-Track your request anytime in your dashboard:
+${oldStatus ? `Previous Status: ${oldStatus}\n` : ''}Current Status: ${newStatus}
+Date: ${formattedDate}
+${adminMessage ? `\nMessage from Technical Desk:\n${adminMessage}\n` : ''}
+You can track your request anytime through your customer dashboard:
 ${portalUrl}
 
 Regards,
@@ -340,10 +406,12 @@ export async function sendAdminReplyEmail({
   reference,
   currentStatus = 'In Progress',
   adminMessage,
-  baseUrl = 'https://www.trishulmetal.com',
+  baseUrl,
+  req,
 }) {
-  const portalUrl = `${baseUrl.replace(/\/+$/, '')}/portal`;
-  const subject = 'New Response to Your Trishul Metals & Alloys Request';
+  const publicUrl = baseUrl || getPublicAppUrl(req);
+  const portalUrl = `${publicUrl.replace(/\/+$/, '')}/portal`;
+  const subject = `New Response to Your Trishul Metals & Alloys Request [${reference}]`;
 
   const html = renderBrandedEmailTemplate({
     title: subject,
@@ -369,7 +437,7 @@ export async function sendAdminReplyEmail({
       label: 'View in Portal & Respond',
       url: portalUrl,
     },
-    footerNotes: 'Log in to your customer portal to review details, upload purchase orders, or reply directly.',
+    footerNotes: `Direct link: <a href="${portalUrl}" style="color: #d4af37; word-break: break-all;">${portalUrl}</a>`,
   });
 
   const text = `Hello ${customerName || 'Customer'},

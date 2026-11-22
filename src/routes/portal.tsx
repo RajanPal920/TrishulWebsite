@@ -377,18 +377,18 @@ function CustomerPortalPage() {
   return (
     <div className="min-h-screen pb-20">
       {/* Top Banner / Customer Identity */}
-      <section className="border-b border-border bg-card/40 py-8">
+      <section className="border-b border-border bg-card/40 py-6 sm:py-8">
         <div className="site-container">
           <Breadcrumbs items={[{ label: "Customer Portal", to: "/portal" }]} />
 
-          <div className="mt-6 flex flex-col justify-between gap-6 md:flex-row md:items-center">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/15 font-serif text-xl font-bold text-primary shadow-inner">
+          <div className="mt-5 sm:mt-6 flex flex-col justify-between gap-5 sm:gap-6 md:flex-row md:items-center">
+            <div className="flex items-start gap-3.5 sm:gap-4 min-w-0 flex-1">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/15 font-serif text-lg sm:text-xl font-bold text-primary shadow-inner">
                 {displayName.charAt(0).toUpperCase()}
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="font-serif text-2xl font-bold text-foreground md:text-3xl">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                  <h1 className="font-serif text-xl sm:text-2xl md:text-3xl font-bold text-foreground break-words">
                     Welcome, {displayName}
                   </h1>
                   <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
@@ -396,20 +396,20 @@ function CustomerPortalPage() {
                     Verified Customer
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Mail className="h-3.5 w-3.5 text-primary/70" />
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5 break-all">
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-primary/70" />
                     {user.email}
                   </span>
                   {user.phone ? (
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5 text-primary/70" />
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 shrink-0 text-primary/70" />
                       {user.phone}
                     </span>
                   ) : null}
                   {user.company ? (
-                    <span className="flex items-center gap-1">
-                      <Building className="h-3.5 w-3.5 text-primary/70" />
+                    <span className="flex items-center gap-1.5">
+                      <Building className="h-3.5 w-3.5 shrink-0 text-primary/70" />
                       {user.company}
                     </span>
                   ) : null}
@@ -417,11 +417,11 @@ function CustomerPortalPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
               <Link
                 to="/rfq"
                 hash="build-enquiry"
-                className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow transition hover:opacity-90"
+                className="inline-flex flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow transition hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
                 New RFQ Inquiry
@@ -429,7 +429,7 @@ function CustomerPortalPage() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition hover:border-red-500/50 hover:text-red-400"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-border px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition hover:border-red-500/50 hover:text-red-400"
                 title="Sign out of your customer account"
               >
                 <LogOut className="h-4 w-4" />
@@ -439,11 +439,11 @@ function CustomerPortalPage() {
           </div>
 
           {/* Simple Navigation Tabs */}
-          <div className="mt-8 flex border-b border-border">
+          <div className="mt-6 sm:mt-8 flex border-b border-border overflow-x-auto scrollbar-none">
             <button
               type="button"
               onClick={() => setActiveTab("queries")}
-              className={`flex items-center gap-2 border-b-2 px-6 py-3 text-sm font-medium transition-colors ${activeTab === "queries"
+              className={`flex items-center gap-2 border-b-2 px-4 sm:px-6 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === "queries"
                 ? "border-primary font-semibold text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
@@ -459,7 +459,7 @@ function CustomerPortalPage() {
             <button
               type="button"
               onClick={() => setActiveTab("profile")}
-              className={`flex items-center gap-2 border-b-2 px-6 py-3 text-sm font-medium transition-colors ${activeTab === "profile"
+              className={`flex items-center gap-2 border-b-2 px-4 sm:px-6 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === "profile"
                 ? "border-primary font-semibold text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
@@ -472,7 +472,7 @@ function CustomerPortalPage() {
       </section>
 
       {/* Main Content Area */}
-      <main className="site-container pt-8">
+      <main className="site-container pt-6 sm:pt-8">
         {/* ======================================================== */}
         {/* TAB 1: MY QUERIES / MY RFQS                              */}
         {/* ======================================================== */}
@@ -650,7 +650,7 @@ function CustomerPortalPage() {
         {/* ======================================================== */}
         {activeTab === "profile" ? (
           <div className="mx-auto max-w-2xl">
-            <div className="rounded-md border border-border bg-card/50 p-6 md:p-8 shadow-sm">
+            <div className="rounded-md border border-border bg-card/50 p-4 sm:p-6 md:p-8 shadow-sm">
               <div className="flex items-center gap-3 border-b border-border pb-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
                   <UserIcon className="h-5 w-5" />
@@ -775,7 +775,7 @@ function CustomerPortalPage() {
             </div>
 
             {/* Security & Password Section */}
-            <div className="mt-8 rounded-md border border-border bg-card p-6 shadow-sm">
+            <div className="mt-6 sm:mt-8 rounded-md border border-border bg-card p-4 sm:p-6 md:p-8 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">

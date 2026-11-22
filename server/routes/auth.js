@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { get, run, all, sqliteDb } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
-import { sendPasswordResetEmail } from '../services/email.js';
+import { sendPasswordResetEmail, getPublicAppUrl } from '../services/email.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
@@ -979,8 +979,7 @@ async function handleForgotPasswordRequest(req, res) {
       }
 
       // Determine client base URL
-      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-      const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+      const baseUrl = getPublicAppUrl(req);
 
       // Send the email with the secure link
       await sendPasswordResetEmail({

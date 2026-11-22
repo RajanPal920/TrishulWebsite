@@ -371,9 +371,10 @@ function AdminConsolePage() {
       setRfqHistory(hist.history || []);
 
       if (res.emailSent) {
-        setRfqActionMessage("Status and response updated. Customer notified via email.");
+        setRfqActionMessage(`Status and response updated. Customer notified via real email (${selectedRfq.email}).`);
       } else if (notifyCustomerDraft) {
-        setRfqActionMessage("Status and response saved. Email logged/dispatched.");
+        const errorDetail = res.emailError || "Email service not configured in environment";
+        setRfqActionMessage(`Status updated to "${adminStatusDraft}". Note: Customer email was not delivered (${errorDetail}).`);
       } else {
         setRfqActionMessage("Status and response saved (customer email notification skipped).");
       }

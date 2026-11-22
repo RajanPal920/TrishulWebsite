@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { get, all, run, sqliteDb } from '../db/connection.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendRequestStatusUpdateEmail, sendAdminReplyEmail } from '../services/email.js';
+import { sendRequestStatusUpdateEmail, sendAdminReplyEmail, getPublicAppUrl } from '../services/email.js';
 
 const router = express.Router();
 
@@ -232,8 +232,7 @@ router.put('/rfqs/:id', async (req, res) => {
     const shouldNotify = notify_customer !== false && (hasStatusChanged || hasNewCustomerResponse);
 
     if (shouldNotify && recipientEmail) {
-      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-      const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+      const baseUrl = getPublicAppUrl(req);
 
       try {
         emailResult = await sendRequestStatusUpdateEmail({
@@ -244,10 +243,12 @@ router.put('/rfqs/:id', async (req, res) => {
           newStatus,
           adminMessage: newAdminResponse || null,
           baseUrl,
+          req,
         });
         emailSent = Boolean(emailResult?.success);
       } catch (mailErr) {
         console.warn('[Admin Customer Notification Warning]:', mailErr.message);
+        emailResult = { success: false, error: mailErr.message };
       }
     }
 
@@ -305,11 +306,12 @@ router.put('/rfqs/:id', async (req, res) => {
     return res.json({
       success: true,
       message: emailSent
-        ? `Request updated and email notification sent to ${existing.email}.`
-        : 'Request status updated successfully.',
+        ? `Request status updated to "${newStatus}" and email notification sent to ${recipientEmail}.`
+        : `Request status updated to "${newStatus}".${shouldNotify ? ` Note: Customer email could not be delivered (${emailResult?.error || 'Email service not configured'}).` : ''}`,
       rfq: updated,
       emailSent,
       emailDeliveryMode: emailResult?.mode || 'none',
+      emailError: emailResult?.error || null,
     });
   } catch (err) {
     console.error('[Admin RFQ Status Error]:', err);
@@ -355,8 +357,7 @@ router.post('/rfqs/:id/reply', async (req, res) => {
       [cleanMsg, newStatus, existing.id]
     );
 
-    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+    const baseUrl = getPublicAppUrl(req);
 
     let emailSent = false;
     let emailResult = null;
@@ -368,9 +369,10 @@ router.post('/rfqs/:id/reply', async (req, res) => {
         currentStatus: newStatus,
         adminMessage: cleanMsg,
         baseUrl,
+        req,
       }).catch((mailErr) => {
         console.warn('[Admin Reply Email Warning]:', mailErr.message);
-        return { success: false };
+        return { success: false, error: mailErr.message };
       });
       emailSent = Boolean(emailResult?.success);
     }
@@ -398,16 +400,18 @@ router.post('/rfqs/:id/reply', async (req, res) => {
       'REPLY_TO_CUSTOMER',
       'rfq_requests',
       existing.id,
-      `Sent official reply to ${existing.email} (Status: ${newStatus})`,
+      `Sent official reply to ${recipientEmail} (Status: ${newStatus})`,
       req
     );
 
     return res.json({
       success: true,
       message: emailSent
-        ? `Reply dispatched and email notification sent to ${existing.email}.`
-        : 'Reply recorded successfully.',
+        ? `Reply dispatched and email notification sent to ${recipientEmail}.`
+        : `Reply recorded successfully. Note: Customer email could not be delivered (${emailResult?.error || 'Email service not configured'}).`,
       emailSent,
+      emailDeliveryMode: emailResult?.mode || 'none',
+      emailError: emailResult?.error || null,
     });
   } catch (err) {
     console.error('[Admin Reply Error]:', err);
@@ -466,8 +470,7 @@ router.post('/rfqs/:id/retry-notification', async (req, res) => {
       return res.status(400).json({ error: 'No customer email address on this request.' });
     }
 
-    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+    const baseUrl = getPublicAppUrl(req);
 
     const emailResult = await sendRequestStatusUpdateEmail({
       to: existing.email,
@@ -477,6 +480,7 @@ router.post('/rfqs/:id/retry-notification', async (req, res) => {
       newStatus: existing.status,
       adminMessage: existing.admin_response || null,
       baseUrl,
+      req,
     });
 
     const now = new Date().toISOString();
@@ -487,11 +491,20 @@ router.post('/rfqs/:id/retry-notification', async (req, res) => {
       [actId, existing.id, req.user.id, req.user.full_name || 'Admin', existing.status, existing.status, emailResult?.success ? 1 : 0, now]
     ).catch(() => {});
 
-    return res.json({
-      success: true,
-      message: `Notification retried successfully to ${existing.email}.`,
-      deliveryMode: emailResult?.mode || 'none',
-    });
+    if (emailResult?.success) {
+      return res.json({
+        success: true,
+        message: `Notification email dispatched successfully to ${existing.email}.`,
+        deliveryMode: emailResult?.mode || 'none',
+        emailSent: true,
+      });
+    } else {
+      return res.status(502).json({
+        error: `Failed to deliver email: ${emailResult?.error || 'Email service not configured.'}`,
+        deliveryMode: emailResult?.mode || 'failed',
+        emailSent: false,
+      });
+    }
   } catch (err) {
     console.error('[Admin Retry Notification Error]:', err);
     return res.status(500).json({ error: 'Failed to retry customer notification.' });

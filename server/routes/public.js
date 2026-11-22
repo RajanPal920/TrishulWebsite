@@ -1,30 +1,23 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { all, get, run } from '../db/connection.js';
-import { sendRequestReceivedEmail } from '../services/email.js';
+import { sendRequestReceivedEmail, sendEmail, getPublicAppUrl } from '../services/email.js';
 
 const router = express.Router();
 
 /**
- * Dispatch internal notification email from notifications@trishulmetal.com to contactustrishul@gmail.com
- * Supports console audit logging and environmental webhook/transport safely without blocking user flow.
+ * Dispatch internal notification email to export desk
  */
 async function dispatchEmailNotification({ type, reference, customerName, email, company, phone, summary }) {
-  const from = 'notifications@trishulmetal.com';
-  const to = 'contactustrishul@gmail.com';
+  const to = 'export@trishulmetal.com';
   const subject = `[Trishul Desk] New ${type}: ${reference} (${company || customerName})`;
-
-  console.log(`[Email Notification Dispatcher] Queued:`, {
-    from,
+  const text = `New ${type} received:\nReference: ${reference}\nCustomer: ${customerName} <${email}>\nCompany: ${company || '—'}\nPhone: ${phone || '—'}\nSummary: ${summary || '—'}`;
+  await sendEmail({
     to,
     subject,
-    reference,
-    customer: `${customerName} <${email}>`,
-    company,
-    phone,
-    summary,
-    timestamp: new Date().toISOString(),
-  });
+    text,
+    html: `<p><strong>New ${type} received:</strong></p><p><strong>Reference:</strong> ${reference}<br><strong>Customer:</strong> ${customerName} &lt;${email}&gt;<br><strong>Company:</strong> ${company || '—'}<br><strong>Phone:</strong> ${phone || '—'}<br><strong>Summary:</strong> ${summary || '—'}</p>`,
+  }).catch((err) => console.warn('[Internal Notification Warning]:', err.message));
 }
 
 /**
@@ -180,8 +173,7 @@ router.post('/rfq', async (req, res) => {
     ).catch(() => {});
 
     // Determine base URL
-    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+    const baseUrl = getPublicAppUrl(req);
 
     // 1. Dispatch customer email notification: Email A (Request Received)
     sendRequestReceivedEmail({
