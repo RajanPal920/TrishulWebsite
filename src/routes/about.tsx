@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Section, SectionHead, Breadcrumbs, BulletList, CtaBand } from "@/components/site/parts";
 import { FacilityGallery } from "@/components/site/FacilityGallery";
+import { FounderAndGroupSection } from "@/components/site/FounderAndGroupSection";
 
 import { company, trustPoints } from "@/data/company";
 
@@ -40,6 +41,9 @@ function About() {
             </div>
           ))}
         </div>
+      </Section>
+      <Section className="border-t border-border bg-gradient-to-b from-background via-card/10 to-background">
+        <FounderAndGroupSection />
       </Section>
       <Section className="border-t border-border bg-card/30">
         <SectionHead eyebrow="How we work" title="Specification review before pricing" />
