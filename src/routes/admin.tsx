@@ -118,7 +118,7 @@ function AdminConsolePage() {
   const [loadingData, setLoadingData] = useState(false);
 
   // Admin login credentials (for non-authenticated state)
-  const [adminUsername, setAdminUsername] = useState("admin");
+  const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
@@ -220,7 +220,8 @@ function AdminConsolePage() {
     setLoginError(null);
     setLoginBusy(true);
     try {
-      const cleanUsername = adminUsername.trim().toLowerCase();
+      const rawInput = adminUsername.trim().toLowerCase();
+      const cleanUsername = rawInput || "admin";
       const loggedUser = await login(cleanUsername, adminPassword);
       setAdminPassword("");
       if (loggedUser.role !== "admin") {
@@ -578,10 +579,9 @@ function AdminConsolePage() {
               </label>
               <input
                 type="text"
-                required
                 value={adminUsername}
                 onChange={(e) => setAdminUsername(e.target.value)}
-                placeholder="admin or admin@trishulmetal.com"
+                placeholder="admin or admin@trishulmetal.com (default: admin)"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}

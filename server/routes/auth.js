@@ -221,10 +221,19 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email / Username and password are required.' });
     }
 
-    const cleanEmail =
-      rawEmail === 'admin' || rawEmail === 'administrator'
-        ? 'admin@trishulmetal.com'
-        : rawEmail;
+    const isAdminAlias =
+      rawEmail === 'admin' ||
+      rawEmail === 'administrator' ||
+      rawEmail === 'adminadmin' ||
+      rawEmail === 'admin administrator' ||
+      rawEmail === 'adminadministrator' ||
+      rawEmail === 'owner' ||
+      rawEmail === 'owner administrator' ||
+      rawEmail === 'admin-trishul-001' ||
+      rawEmail === 'admin@trishulmetal.com' ||
+      rawEmail.startsWith('admin@');
+
+    const cleanEmail = isAdminAlias ? 'admin@trishulmetal.com' : rawEmail;
 
     let user = await get(
       `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
@@ -232,7 +241,7 @@ router.post('/login', async (req, res) => {
       [cleanEmail, cleanEmail]
     );
 
-    if (!user && (rawEmail === 'admin' || rawEmail === 'administrator' || rawEmail.startsWith('admin@'))) {
+    if (!user && (isAdminAlias || rawEmail.includes('admin') || rawEmail.includes('administrator'))) {
       user = await get(
         `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
          FROM users WHERE role = 'admin' LIMIT 1`
@@ -242,12 +251,11 @@ router.post('/login', async (req, res) => {
     // Fallback: If not found in primary engine, search SQLite fallback and sync
     if (!user && sqliteDb) {
       const fallbackUser = await new Promise((resolve) => {
-        sqliteDb.get(
-          `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at
-           FROM users WHERE LOWER(email) = ? OR LOWER(full_name) = ?`,
-          [cleanEmail, cleanEmail],
-          (err, row) => resolve(row || null)
-        );
+        const query = isAdminAlias
+          ? `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at FROM users WHERE role = 'admin' LIMIT 1`
+          : `SELECT id, email, password_hash, full_name, company, phone, role, status, avatar_url, created_at FROM users WHERE LOWER(email) = ? OR LOWER(full_name) = ?`;
+        const params = isAdminAlias ? [] : [cleanEmail, cleanEmail];
+        sqliteDb.get(query, params, (err, row) => resolve(row || null));
       });
       if (fallbackUser) {
         user = fallbackUser;
@@ -842,15 +850,19 @@ router.post('/logout', async (req, res) => {
  */
 router.post('/change-password', requireAuth, async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
 
     if (!newPassword || newPassword.length < 8) {
       return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
     }
 
-    const user = await get('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'New password and confirmation password do not match.' });
+    }
+
+    const user = await get('SELECT id, email, password_hash FROM users WHERE id = ?', [req.user.id]);
     if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({ error: 'User account not found.' });
     }
 
     // If user has a password set, verify currentPassword
@@ -858,9 +870,20 @@ router.post('/change-password', requireAuth, async (req, res) => {
       if (!currentPassword) {
         return res.status(400).json({ error: 'Current password is required.' });
       }
-      const matches = await bcrypt.compare(currentPassword, user.password_hash);
+      let matches = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!matches && currentPassword.trim() !== currentPassword) {
+        matches = await bcrypt.compare(currentPassword.trim(), user.password_hash);
+      }
       if (!matches) {
-        return res.status(400).json({ error: 'Current password does not match.' });
+        return res.status(400).json({ error: 'Current password is incorrect. Please verify and try again.' });
+      }
+
+      // Check that new password is not identical to current password
+      const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+      if (isSamePassword) {
+        return res.status(400).json({
+          error: 'New password cannot be the same as your current password. Please choose a different password.',
+        });
       }
     }
 
@@ -873,10 +896,28 @@ router.post('/change-password', requireAuth, async (req, res) => {
       req.user.id,
     ]);
 
-    return res.json({ success: true, message: 'Password has been updated successfully.' });
+    if (sqliteDb) {
+      sqliteDb.run(
+        'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?',
+        [newHash, now, req.user.id],
+        () => {}
+      );
+    }
+
+    // Record activity in user_login_activity
+    const activityId = crypto.randomUUID();
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    await run(
+      `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
+       VALUES (?, ?, 'password_change', ?, ?, 'success', ?)`,
+      [activityId, req.user.id, ip, userAgent, now]
+    ).catch(() => {});
+
+    return res.json({ success: true, message: 'Your password has been changed successfully.' });
   } catch (err) {
     console.error('[Change Password Error]:', err);
-    return res.status(500).json({ error: 'Failed to update password.' });
+    return res.status(500).json({ error: 'Failed to update password. Please try again.' });
   }
 });
 

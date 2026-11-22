@@ -302,6 +302,7 @@ export const api = {
     async changePassword(payload: {
       currentPassword?: string;
       newPassword: string;
+      confirmPassword?: string;
     }): Promise<{ success: boolean; message: string }> {
       return request<{ success: boolean; message: string }>('/api/auth/change-password', {
         method: 'POST',
