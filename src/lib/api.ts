@@ -46,6 +46,8 @@ export interface ProductRequestItem {
   specification?: string | null;
   notes?: string | null;
   status: string;
+  admin_response?: string | null;
+  admin_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +61,8 @@ export interface MaterialRequestItem {
   specification?: string | null;
   notes?: string | null;
   status: string;
+  admin_response?: string | null;
+  admin_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +104,8 @@ export interface ActivityItem {
   type: 'product_request' | 'material_request' | 'inquiry';
   title: string;
   status: string;
+  admin_response?: string | null;
+  admin_notes?: string | null;
   created_at: string;
   detail?: string;
 }
@@ -147,6 +153,8 @@ export interface RfqInquiryItem {
   }>;
   attachments?: Array<{ name: string; path: string; size: number }> | null;
   status: string;
+  admin_response?: string | null;
+  admin_notes?: string | null;
   created_at: string;
 }
 
@@ -307,6 +315,31 @@ export const api = {
         body: JSON.stringify({ email }),
       });
     },
+
+    async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    async verifyResetToken(token: string): Promise<{ valid: boolean; email?: string; error?: string }> {
+      return request<{ valid: boolean; email?: string; error?: string }>(
+        `/api/auth/verify-reset-token?token=${encodeURIComponent(token)}`
+      );
+    },
+
+    async resetPassword(payload: {
+      token: string;
+      password?: string;
+      newPassword?: string;
+      confirmPassword?: string;
+    }): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
   },
 
   customer: {
@@ -430,6 +463,20 @@ export const api = {
 
     async getRfq(id: string): Promise<{ rfq: RfqInquiryItem }> {
       return request<{ rfq: RfqInquiryItem }>(`/api/customer/rfqs/${id}`);
+    },
+
+    async getRfqHistory(id: string): Promise<{
+      reference: string;
+      history: Array<{
+        id: string;
+        action: string;
+        old_status?: string;
+        new_status?: string;
+        message?: string;
+        created_at: string;
+      }>;
+    }> {
+      return request(`/api/customer/rfqs/${id}/history`);
     },
 
     async deleteRfq(id: string): Promise<{ success: boolean; message: string }> {
@@ -593,11 +640,58 @@ export const api = {
 
     async updateRfqStatus(
       id: string,
-      data: { status: string; notes?: string }
-    ): Promise<{ success: boolean; message: string; rfq: any }> {
-      return request<{ success: boolean; message: string; rfq: any }>(`/api/admin/rfqs/${id}`, {
+      data: {
+        status?: string;
+        admin_response?: string;
+        admin_notes?: string;
+        response?: string;
+        notes?: string;
+        notify_customer?: boolean;
+      }
+    ): Promise<{ success: boolean; message: string; rfq: any; emailSent?: boolean }> {
+      return request<{ success: boolean; message: string; rfq: any; emailSent?: boolean }>(`/api/admin/rfqs/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
+      });
+    },
+
+    async replyRfq(
+      id: string,
+      data: {
+        message: string;
+        status?: string;
+        notify_customer?: boolean;
+      }
+    ): Promise<{ success: boolean; message: string; rfq: any; emailSent?: boolean }> {
+      return request<{ success: boolean; message: string; rfq: any; emailSent?: boolean }>(`/api/admin/rfqs/${id}/reply`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getRfqHistory(id: string): Promise<{
+      reference: string;
+      history: Array<{
+        id: string;
+        request_id: string;
+        actor_type: string;
+        actor_id?: string;
+        actor_name?: string;
+        action: string;
+        old_status?: string;
+        new_status?: string;
+        message?: string;
+        is_internal: number;
+        email_sent: number;
+        created_at: string;
+      }>;
+    }> {
+      return request(`/api/admin/rfqs/${id}/history`);
+    },
+
+    async retryRfqNotification(id: string): Promise<{ success: boolean; message: string; emailResult: any }> {
+      return request(`/api/admin/rfqs/${id}/retry-notification`, {
+        method: 'POST',
       });
     },
 

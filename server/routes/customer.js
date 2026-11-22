@@ -570,7 +570,7 @@ router.get('/rfqs', async (req, res) => {
     const rfqs = await all(
       `SELECT id, reference, confirmation_token, company, contact_name, email, phone, country,
               incoterm, delivery_port, target_lead_time, project_name, message, certification,
-              testing, items, attachments, status, created_at
+              testing, items, attachments, status, admin_response, created_at
        FROM rfq_requests
        WHERE user_id = ? OR (user_id IS NULL AND LOWER(email) = ?)
        ORDER BY created_at DESC`,
@@ -602,7 +602,7 @@ router.get('/rfqs/:id', async (req, res) => {
     const rfq = await get(
       `SELECT id, reference, confirmation_token, company, contact_name, email, phone, country,
               incoterm, delivery_port, target_lead_time, project_name, message, certification,
-              testing, items, attachments, status, created_at
+              testing, items, attachments, status, admin_response, created_at
        FROM rfq_requests
        WHERE (id = ? OR reference = ?) AND (user_id = ? OR (user_id IS NULL AND LOWER(email) = ?))`,
       [req.params.id, req.params.id, req.user.id, userEmail]
@@ -623,6 +623,42 @@ router.get('/rfqs/:id', async (req, res) => {
   } catch (err) {
     console.error('[Customer RFQ Detail Error]:', err);
     return res.status(500).json({ error: 'Failed to retrieve inquiry details.' });
+  }
+});
+
+/**
+ * GET /api/customer/rfqs/:id/history
+ * Retrieve public activity history (status transitions, official replies) for customer's request.
+ * Strictly excludes internal notes (is_internal = 1).
+ */
+router.get('/rfqs/:id/history', async (req, res) => {
+  try {
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+    const rfq = await get(
+      `SELECT id, reference FROM rfq_requests
+       WHERE (id = ? OR reference = ?) AND (user_id = ? OR (user_id IS NULL AND LOWER(email) = ?))`,
+      [req.params.id, req.params.id, req.user.id, userEmail]
+    );
+
+    if (!rfq) {
+      return res.status(404).json({ error: 'Inquiry not found or access denied.' });
+    }
+
+    const history = await all(
+      `SELECT id, action, old_status, new_status, message, created_at
+       FROM request_activity_history
+       WHERE (request_id = ? OR request_id = ?) AND (is_internal = 0 OR is_internal IS NULL)
+       ORDER BY created_at ASC`,
+      [rfq.id, rfq.reference]
+    );
+
+    return res.json({
+      reference: rfq.reference,
+      history: history || [],
+    });
+  } catch (err) {
+    console.error('[Customer RFQ History Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve activity history.' });
   }
 });
 

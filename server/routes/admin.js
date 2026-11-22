@@ -1,8 +1,9 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { get, all, run } from '../db/connection.js';
+import { get, all, run, sqliteDb } from '../db/connection.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { sendRequestStatusUpdateEmail, sendAdminReplyEmail } from '../services/email.js';
 
 const router = express.Router();
 
@@ -170,27 +171,315 @@ router.get('/rfqs', async (req, res) => {
 
 /**
  * PUT /api/admin/rfqs/:id
- * Update status of an RFQ query
+ * Update status, admin response, internal notes, and notify customer via email
  */
 router.put('/rfqs/:id', async (req, res) => {
   try {
-    const { status, notes } = req.body;
+    const { status, admin_response, response, admin_notes, notes, notify_customer } = req.body;
+    const now = new Date().toISOString();
+
+    const existing = await get(
+      'SELECT id, reference, company, contact_name, email, phone, status, admin_response, admin_notes, user_id FROM rfq_requests WHERE id = ? OR reference = ?',
+      [req.params.id, req.params.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Inquiry / RFQ not found.' });
+    }
+
+    const oldStatus = existing.status || 'Pending';
+    const newStatus = status ? status.trim() : oldStatus;
+    const newAdminResponse = admin_response !== undefined ? (admin_response || '').trim() : (response !== undefined ? (response || '').trim() : existing.admin_response);
+    const newAdminNotes = admin_notes !== undefined ? (admin_notes || '').trim() : (notes !== undefined ? (notes || '').trim() : existing.admin_notes);
+
+    const hasStatusChanged = status && status.trim().toLowerCase() !== oldStatus.toLowerCase();
+    const hasNewCustomerResponse = admin_response !== undefined || response !== undefined;
+    const hasNewInternalNote = (admin_notes !== undefined || notes !== undefined) && newAdminNotes !== existing.admin_notes;
+
+    // 1. Update database record
+    await run(
+      `UPDATE rfq_requests
+       SET status = ?,
+           admin_response = ?,
+           admin_notes = ?
+       WHERE id = ?`,
+      [newStatus, newAdminResponse || null, newAdminNotes || null, existing.id]
+    );
+
+    if (sqliteDb) {
+      sqliteDb.run(
+        `UPDATE rfq_requests
+         SET status = ?,
+             admin_response = ?,
+             admin_notes = ?
+         WHERE id = ?`,
+        [newStatus, newAdminResponse || null, newAdminNotes || null, existing.id],
+        () => {}
+      );
+    }
+
+    let emailSent = false;
+    let emailResult = null;
+
+    // 2. Dispatch Customer Email Notification if requested and status changed or customer response provided
+    const shouldNotify = notify_customer !== false && (hasStatusChanged || hasNewCustomerResponse);
+
+    if (shouldNotify && existing.email) {
+      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+      const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+
+      try {
+        emailResult = await sendRequestStatusUpdateEmail({
+          to: existing.email,
+          customerName: existing.contact_name || existing.company || 'Valued Customer',
+          reference: existing.reference,
+          oldStatus,
+          newStatus,
+          adminMessage: newAdminResponse || null,
+          baseUrl,
+        });
+        emailSent = Boolean(emailResult?.success);
+      } catch (mailErr) {
+        console.warn('[Admin Customer Notification Warning]:', mailErr.message);
+      }
+    }
+
+    // 3. Record in request_activity_history audit trail
+    if (hasStatusChanged || hasNewCustomerResponse) {
+      const actId = crypto.randomUUID();
+      const actionType = hasStatusChanged ? 'STATUS_CHANGED' : 'ADMIN_REPLY';
+      await run(
+        `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+         VALUES (?, ?, 'admin', ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [
+          actId,
+          existing.id,
+          req.user.id,
+          req.user.full_name || 'Admin',
+          actionType,
+          oldStatus,
+          newStatus,
+          newAdminResponse || null,
+          emailSent ? 1 : 0,
+          now,
+        ]
+      ).catch(() => {});
+    }
+
+    // Record separate internal note if added (never emailed to customer)
+    if (hasNewInternalNote && newAdminNotes) {
+      const noteActId = crypto.randomUUID();
+      await run(
+        `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+         VALUES (?, ?, 'admin', ?, ?, 'INTERNAL_NOTE', ?, ?, ?, 1, 0, ?)`,
+        [
+          noteActId,
+          existing.id,
+          req.user.id,
+          req.user.full_name || 'Admin',
+          newStatus,
+          newStatus,
+          newAdminNotes,
+          now,
+        ]
+      ).catch(() => {});
+    }
+
+    await logAdminAction(
+      req.user,
+      'UPDATE_RFQ_STATUS',
+      'rfq_requests',
+      existing.id,
+      `Status: ${oldStatus} -> ${newStatus}${newAdminResponse ? ` | Customer Message Added` : ''}${emailSent ? ' | Customer Emailed' : ''}`,
+      req
+    );
+
+    const updated = await get('SELECT * FROM rfq_requests WHERE id = ?', [existing.id]);
+    return res.json({
+      success: true,
+      message: emailSent
+        ? `Request updated and email notification sent to ${existing.email}.`
+        : 'Request status updated successfully.',
+      rfq: updated,
+      emailSent,
+      emailDeliveryMode: emailResult?.mode || 'none',
+    });
+  } catch (err) {
+    console.error('[Admin RFQ Status Error]:', err);
+    return res.status(500).json({ error: 'Failed to update RFQ status.' });
+  }
+});
+
+/**
+ * POST /api/admin/rfqs/:id/reply
+ * Send official customer-facing reply message and dispatch email
+ */
+router.post('/rfqs/:id/reply', async (req, res) => {
+  try {
+    const { message, status } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Reply message cannot be empty.' });
+    }
+
+    const existing = await get(
+      'SELECT id, reference, company, contact_name, email, status FROM rfq_requests WHERE id = ? OR reference = ?',
+      [req.params.id, req.params.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const cleanMsg = message.trim();
+    const newStatus = status ? status.trim() : (existing.status || 'In Progress');
     const now = new Date().toISOString();
 
     await run(
       `UPDATE rfq_requests
-       SET status = COALESCE(?, status)
-       WHERE id = ? OR reference = ?`,
-      [status || null, req.params.id, req.params.id]
+       SET admin_response = ?, status = ?
+       WHERE id = ?`,
+      [cleanMsg, newStatus, existing.id]
     );
 
-    await logAdminAction(req.user, 'UPDATE_RFQ_STATUS', 'rfq_requests', req.params.id, `Status set to ${status}`, req);
+    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
 
-    const updated = await get('SELECT * FROM rfq_requests WHERE id = ? OR reference = ?', [req.params.id, req.params.id]);
-    return res.json({ success: true, message: 'Query status updated successfully.', rfq: updated });
+    let emailSent = false;
+    if (existing.email) {
+      const emailResult = await sendAdminReplyEmail({
+        to: existing.email,
+        customerName: existing.contact_name || existing.company || 'Customer',
+        reference: existing.reference,
+        currentStatus: newStatus,
+        adminMessage: cleanMsg,
+        baseUrl,
+      }).catch((mailErr) => {
+        console.warn('[Admin Reply Email Warning]:', mailErr.message);
+        return { success: false };
+      });
+      emailSent = Boolean(emailResult?.success);
+    }
+
+    // Record in history audit
+    const actId = crypto.randomUUID();
+    await run(
+      `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+       VALUES (?, ?, 'admin', ?, ?, 'ADMIN_REPLY', ?, ?, ?, 0, ?, ?)`,
+      [
+        actId,
+        existing.id,
+        req.user.id,
+        req.user.full_name || 'Admin',
+        existing.status,
+        newStatus,
+        cleanMsg,
+        emailSent ? 1 : 0,
+        now,
+      ]
+    ).catch(() => {});
+
+    await logAdminAction(
+      req.user,
+      'REPLY_TO_CUSTOMER',
+      'rfq_requests',
+      existing.id,
+      `Sent official reply to ${existing.email} (Status: ${newStatus})`,
+      req
+    );
+
+    return res.json({
+      success: true,
+      message: emailSent
+        ? `Reply dispatched and email notification sent to ${existing.email}.`
+        : 'Reply recorded successfully.',
+      emailSent,
+    });
   } catch (err) {
-    console.error('[Admin RFQ Status Error]:', err);
-    return res.status(500).json({ error: 'Failed to update RFQ status.' });
+    console.error('[Admin Reply Error]:', err);
+    return res.status(500).json({ error: 'Failed to send reply to customer.' });
+  }
+});
+
+/**
+ * GET /api/admin/rfqs/:id/history
+ * Complete activity & audit history for a customer request
+ */
+router.get('/rfqs/:id/history', async (req, res) => {
+  try {
+    const existing = await get(
+      'SELECT id, reference FROM rfq_requests WHERE id = ? OR reference = ?',
+      [req.params.id, req.params.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const history = await all(
+      `SELECT * FROM request_activity_history
+       WHERE request_id = ? OR request_id = ?
+       ORDER BY created_at ASC`,
+      [existing.id, existing.reference]
+    );
+
+    return res.json({
+      reference: existing.reference,
+      history: history || [],
+    });
+  } catch (err) {
+    console.error('[Admin RFQ History Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve request history.' });
+  }
+});
+
+/**
+ * POST /api/admin/rfqs/:id/retry-notification
+ * Re-send latest notification email if previous attempt failed
+ */
+router.post('/rfqs/:id/retry-notification', async (req, res) => {
+  try {
+    const existing = await get(
+      'SELECT id, reference, company, contact_name, email, status, admin_response FROM rfq_requests WHERE id = ? OR reference = ?',
+      [req.params.id, req.params.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    if (!existing.email) {
+      return res.status(400).json({ error: 'No customer email address on this request.' });
+    }
+
+    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+
+    const emailResult = await sendRequestStatusUpdateEmail({
+      to: existing.email,
+      customerName: existing.contact_name || existing.company || 'Customer',
+      reference: existing.reference,
+      oldStatus: existing.status,
+      newStatus: existing.status,
+      adminMessage: existing.admin_response || null,
+      baseUrl,
+    });
+
+    const now = new Date().toISOString();
+    const actId = crypto.randomUUID();
+    await run(
+      `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+       VALUES (?, ?, 'admin', ?, ?, 'NOTIFICATION_RETRIED', ?, ?, 'Admin manually retried notification dispatch', 0, ?, ?)`,
+      [actId, existing.id, req.user.id, req.user.full_name || 'Admin', existing.status, existing.status, emailResult?.success ? 1 : 0, now]
+    ).catch(() => {});
+
+    return res.json({
+      success: true,
+      message: `Notification retried successfully to ${existing.email}.`,
+      deliveryMode: emailResult?.mode || 'none',
+    });
+  } catch (err) {
+    console.error('[Admin Retry Notification Error]:', err);
+    return res.status(500).json({ error: 'Failed to retry customer notification.' });
   }
 });
 

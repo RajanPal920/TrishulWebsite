@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Breadcrumbs, Section, SectionHead } from "@/components/site/parts";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 
 interface AuthSearch {
   next?: string;
@@ -213,12 +214,14 @@ function AuthPage() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail) return;
+    const cleanMail = forgotEmail.trim();
+    if (!cleanMail) return;
     setForgotBusy(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
+      await api.auth.forgotPassword(cleanMail);
       setForgotSuccess(true);
     } catch {
+      // Always show generic success message to prevent account enumeration
       setForgotSuccess(true);
     } finally {
       setForgotBusy(false);

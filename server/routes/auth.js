@@ -2,8 +2,9 @@ import express from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
-import { get, run, sqliteDb } from '../db/connection.js';
+import { get, run, all, sqliteDb } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
+import { sendPasswordResetEmail } from '../services/email.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
@@ -873,15 +874,236 @@ router.post('/change-password', requireAuth, async (req, res) => {
 });
 
 /**
- * POST /api/auth/reset-password-request
+ * Password Reset Controller: Request Reset Token & Send Email
  */
-router.post('/reset-password-request', async (req, res) => {
-  const { email } = req.body;
-  // Always return success to prevent email enumeration
-  return res.json({
-    success: true,
-    message: 'If an account exists with that email address, password reset instructions have been sent.',
-  });
+async function handleForgotPasswordRequest(req, res) {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    // Generic safe response to prevent email enumeration
+    const genericResponse = {
+      success: true,
+      message: 'If an account exists with this email address, password reset instructions have been sent.',
+    };
+
+    if (!cleanEmail) {
+      return res.json(genericResponse);
+    }
+
+    // Look up customer account
+    const user = await get(
+      'SELECT id, email, full_name, role, status FROM users WHERE LOWER(email) = ?',
+      [cleanEmail]
+    );
+
+    if (user && user.status !== 'inactive') {
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      // Invalidate any existing unused reset tokens for this user
+      await run(
+        'UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL',
+        [nowIso, user.id]
+      ).catch(() => {});
+
+      // Generate cryptographically secure random token (32 bytes = 64 hex chars)
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      // Store ONLY the SHA-256 hash in the database
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const tokenId = crypto.randomUUID();
+      // Token expires in 30 minutes
+      const expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+
+      await run(
+        `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [tokenId, user.id, tokenHash, expiresAt, nowIso]
+      );
+
+      if (sqliteDb) {
+        sqliteDb.run(
+          `INSERT OR IGNORE INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [tokenId, user.id, tokenHash, expiresAt, nowIso],
+          () => {}
+        );
+      }
+
+      // Determine client base URL
+      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+      const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+
+      // Send the email with the secure link
+      await sendPasswordResetEmail({
+        to: user.email,
+        customerName: user.full_name,
+        resetToken: rawToken,
+        baseUrl,
+      }).catch((emailErr) => {
+        console.warn('[Password Reset Email Warning]:', emailErr.message);
+      });
+
+      console.log(`[Auth] Issued secure password reset token for: ${cleanEmail}`);
+    } else {
+      console.log(`[Auth] Password reset requested for non-existent email: ${cleanEmail} (suppressed response)`);
+    }
+
+    return res.json(genericResponse);
+  } catch (err) {
+    console.error('[Forgot Password Error]:', err);
+    // Return generic success to avoid leaking server state or account existence
+    return res.json({
+      success: true,
+      message: 'If an account exists with this email address, password reset instructions have been sent.',
+    });
+  }
+}
+
+router.post('/forgot-password', handleForgotPasswordRequest);
+router.post('/reset-password-request', handleForgotPasswordRequest);
+
+/**
+ * GET /api/auth/verify-reset-token
+ * Validates reset token and checks expiry without consuming it
+ */
+router.get('/verify-reset-token', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Token is required.' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    const tokenRecord = await get(
+      `SELECT t.*, u.email, u.full_name
+       FROM password_reset_tokens t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.token_hash = ?`,
+      [tokenHash]
+    );
+
+    if (!tokenRecord || tokenRecord.used_at) {
+      return res.status(400).json({
+        valid: false,
+        error: 'This password reset link is invalid or has already been used.',
+      });
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at).getTime();
+    if (expiresAt < Date.now()) {
+      return res.status(400).json({
+        valid: false,
+        error: 'This password reset link has expired (valid for 30 minutes). Please request a new one.',
+      });
+    }
+
+    return res.json({
+      valid: true,
+      email: tokenRecord.email,
+      fullName: tokenRecord.full_name,
+    });
+  } catch (err) {
+    console.error('[Verify Reset Token Error]:', err);
+    return res.status(500).json({ valid: false, error: 'Failed to verify reset link.' });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Consumes the token and sets a new password
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password, newPassword, confirmPassword } = req.body;
+    const pwd = (newPassword || password || '').trim();
+    const conf = (confirmPassword || '').trim();
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Reset token is required.' });
+    }
+    if (!pwd || pwd.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+    }
+    if (conf && pwd !== conf) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    const tokenRecord = await get(
+      `SELECT t.*, u.id as user_id, u.email, u.full_name
+       FROM password_reset_tokens t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.token_hash = ?`,
+      [tokenHash]
+    );
+
+    if (!tokenRecord || tokenRecord.used_at) {
+      return res.status(400).json({
+        error: 'This password reset link is invalid or has already been used.',
+      });
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at).getTime();
+    if (expiresAt < Date.now()) {
+      return res.status(400).json({
+        error: 'This password reset link has expired. Please request a new reset link.',
+      });
+    }
+
+    const newHash = await bcrypt.hash(pwd, 10);
+    const now = new Date().toISOString();
+
+    // 1. Update customer password
+    await run(
+      `UPDATE users
+       SET password_hash = ?, login_method = 'password', status = 'active', updated_at = ?
+       WHERE id = ?`,
+      [newHash, now, tokenRecord.user_id]
+    );
+
+    if (sqliteDb) {
+      sqliteDb.run(
+        `UPDATE users
+         SET password_hash = ?, login_method = 'password', status = 'active', updated_at = ?
+         WHERE id = ?`,
+        [newHash, now, tokenRecord.user_id],
+        () => {}
+      );
+    }
+
+    // 2. Mark this token as used immediately (single-use)
+    await run('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?', [now, tokenRecord.id]);
+    if (sqliteDb) {
+      sqliteDb.run('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?', [now, tokenRecord.id], () => {});
+    }
+
+    // 3. Invalidate all existing sessions for security
+    await run('DELETE FROM user_sessions WHERE user_id = ?', [tokenRecord.user_id]);
+    if (sqliteDb) {
+      sqliteDb.run('DELETE FROM user_sessions WHERE user_id = ?', [tokenRecord.user_id], () => {});
+    }
+
+    // 4. Log password reset event
+    const activityId = crypto.randomUUID();
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    await run(
+      `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
+       VALUES (?, ?, 'password', ?, ?, 'password_reset_success', ?)`,
+      [activityId, tokenRecord.user_id, ip, userAgent, now]
+    ).catch(() => {});
+
+    console.log(`[Auth] Password reset successfully completed for user: ${tokenRecord.email}`);
+
+    return res.json({
+      success: true,
+      message: 'Your password has been reset successfully. You can now log in with your new credentials.',
+    });
+  } catch (err) {
+    console.error('[Reset Password Error]:', err);
+    return res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+  }
 });
 
 export default router;

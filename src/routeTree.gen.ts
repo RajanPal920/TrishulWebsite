@@ -25,6 +25,7 @@ import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProcessingRouteImport } from './routes/processing'
 import { Route as QualityRouteImport } from './routes/quality'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RfqRouteImport } from './routes/rfq'
 import { Route as ShortlistRouteImport } from './routes/shortlist'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
@@ -123,6 +124,11 @@ const ProcessingRoute = ProcessingRouteImport.update({
 const QualityRoute = QualityRouteImport.update({
   id: '/quality',
   path: '/quality',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RfqRoute = RfqRouteImport.update({
@@ -238,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -275,6 +282,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -312,6 +320,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/processing': typeof ProcessingRoute
   '/quality': typeof QualityRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rfq': typeof RfqRoute
   '/shortlist': typeof ShortlistRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -351,6 +360,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/processing'
     | '/quality'
+    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
@@ -388,6 +398,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/processing'
     | '/quality'
+    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
@@ -424,6 +435,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/processing'
     | '/quality'
+    | '/reset-password'
     | '/rfq'
     | '/shortlist'
     | '/sitemap.xml'
@@ -462,6 +474,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ProcessingRoute: typeof ProcessingRoute
   QualityRoute: typeof QualityRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   RfqRoute: typeof RfqRoute
   ShortlistRoute: typeof ShortlistRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -593,6 +606,13 @@ declare module '@tanstack/react-router' {
       path: '/quality'
       fullPath: '/quality'
       preLoaderRoute: typeof QualityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rfq': {
@@ -762,6 +782,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ProcessingRoute: ProcessingRoute,
   QualityRoute: QualityRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   RfqRoute: RfqRoute,
   ShortlistRoute: ShortlistRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

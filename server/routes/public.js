@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { all, get, run } from '../db/connection.js';
+import { sendRequestReceivedEmail } from '../services/email.js';
 
 const router = express.Router();
 
@@ -170,7 +171,28 @@ router.post('/rfq', async (req, res) => {
       }
     }
 
-    // Trigger internal export desk email notification
+    // Record in request_activity_history for audit trail
+    const histId = crypto.randomUUID();
+    await run(
+      `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+       VALUES (?, ?, 'customer', ?, ?, 'SUBMITTED', NULL, 'Pending', ?, 0, 1, ?)`,
+      [histId, rfqId, userId || null, name || comp || 'Customer', `${items.length} line item(s) submitted via RFQ form`, now]
+    ).catch(() => {});
+
+    // Determine base URL
+    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const baseUrl = origin || process.env.SITE_URL || 'https://www.trishulmetal.com';
+
+    // 1. Dispatch customer email notification: Email A (Request Received)
+    sendRequestReceivedEmail({
+      to: mail,
+      customerName: name || comp || 'Customer',
+      reference: rfqNumber,
+      summary: `${Array.isArray(items) ? items.length : 1} line item(s) enquiry for ${comp || 'project material supply'}`,
+      baseUrl,
+    }).catch((custMailErr) => console.warn('[Customer RFQ Email Warning]:', custMailErr.message));
+
+    // 2. Trigger internal export desk email notification
     dispatchEmailNotification({
       type: 'RFQ Submission',
       reference: rfqNumber,

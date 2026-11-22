@@ -24,6 +24,9 @@ import {
   ChevronRight,
   Database,
   Trash2,
+  MessageSquare,
+  Send,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type AdminCustomerItem, type RfqInquiryItem } from "@/lib/api";
@@ -65,16 +68,16 @@ function formatKolkataTime(isoString?: string | null) {
 }
 
 function getRfqStatusBadge(status?: string | null) {
-  const s = (status || "new").toLowerCase();
-  if (s.includes("responded") || s.includes("quoted") || s.includes("approved")) {
+  const s = (status || "Pending").toLowerCase();
+  if (s === "resolved" || s.includes("responded") || s.includes("quoted") || s.includes("approved")) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
         <CheckCircle2 className="h-3 w-3" />
-        {status || "Responded"}
+        {status || "Resolved"}
       </span>
     );
   }
-  if (s.includes("progress") || s.includes("review")) {
+  if (s === "in progress" || s.includes("progress") || s.includes("review")) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
         <Clock className="h-3 w-3" />
@@ -82,18 +85,26 @@ function getRfqStatusBadge(status?: string | null) {
       </span>
     );
   }
-  if (s.includes("closed") || s.includes("cancelled")) {
+  if (s === "awaiting customer response" || s.includes("awaiting")) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-zinc-600 bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-300">
+      <span className="inline-flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-400">
+        <Mail className="h-3 w-3" />
+        {status || "Awaiting Customer Response"}
+      </span>
+    );
+  }
+  if (s === "rejected" || s.includes("closed") || s.includes("cancelled")) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-400">
         <AlertCircle className="h-3 w-3" />
-        {status || "Closed"}
+        {status || "Rejected"}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-400">
       <Clock className="h-3 w-3" />
-      {status || "New"}
+      {status || "Pending"}
     </span>
   );
 }
@@ -126,6 +137,18 @@ function AdminConsolePage() {
   const [selectedRfq, setSelectedRfq] = useState<RfqInquiryItem | null>(null);
   const [updatingRfqId, setUpdatingRfqId] = useState<string | null>(null);
   const [deletingRfqId, setDeletingRfqId] = useState<string | null>(null);
+
+  // RFQ Detail Modal & Action State
+  const [rfqHistory, setRfqHistory] = useState<any[]>([]);
+  const [loadingRfqHistory, setLoadingRfqHistory] = useState(false);
+  const [adminStatusDraft, setAdminStatusDraft] = useState("Pending");
+  const [adminResponseDraft, setAdminResponseDraft] = useState("");
+  const [adminNotesDraft, setAdminNotesDraft] = useState("");
+  const [notifyCustomerDraft, setNotifyCustomerDraft] = useState(true);
+  const [savingRfqAction, setSavingRfqAction] = useState(false);
+  const [rfqActionMessage, setRfqActionMessage] = useState<string | null>(null);
+  const [rfqActionError, setRfqActionError] = useState<string | null>(null);
+  const [retryingNotification, setRetryingNotification] = useState(false);
 
   // Customers Management
   const [customers, setCustomers] = useState<AdminCustomerItem[]>([]);
@@ -275,12 +298,91 @@ function AdminConsolePage() {
       if (selectedRfq && selectedRfq.id === rfqId) {
         setSelectedRfq((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
-      // Also update in overview stats & recent list if present
       setRecentRfqs((prev) => prev.map((r) => (r.id === rfqId ? { ...r, status: newStatus } : r)));
     } catch (err) {
       console.error("[Failed to update RFQ status]:", err);
     } finally {
       setUpdatingRfqId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRfq) {
+      setAdminStatusDraft(selectedRfq.status || "Pending");
+      setAdminResponseDraft(selectedRfq.admin_response || "");
+      setAdminNotesDraft(selectedRfq.admin_notes || "");
+      setNotifyCustomerDraft(true);
+      setRfqActionMessage(null);
+      setRfqActionError(null);
+      setLoadingRfqHistory(true);
+      api.admin
+        .getRfqHistory(selectedRfq.id)
+        .then((res) => setRfqHistory(res.history || []))
+        .catch(() => setRfqHistory([]))
+        .finally(() => setLoadingRfqHistory(false));
+    } else {
+      setRfqHistory([]);
+      setRfqActionMessage(null);
+      setRfqActionError(null);
+    }
+  }, [selectedRfq?.id]);
+
+  const handleSaveRfqDetails = async () => {
+    if (!selectedRfq) return;
+    setSavingRfqAction(true);
+    setRfqActionMessage(null);
+    setRfqActionError(null);
+    try {
+      const res = await api.admin.updateRfqStatus(selectedRfq.id, {
+        status: adminStatusDraft,
+        admin_response: adminResponseDraft,
+        admin_notes: adminNotesDraft,
+        notify_customer: notifyCustomerDraft,
+      });
+
+      const updatedRfq: RfqInquiryItem = {
+        ...selectedRfq,
+        status: adminStatusDraft,
+        admin_response: adminResponseDraft,
+        admin_notes: adminNotesDraft,
+      };
+
+      setSelectedRfq(updatedRfq);
+      setRfqs((prev) => prev.map((r) => (r.id === selectedRfq.id ? updatedRfq : r)));
+      setRecentRfqs((prev) => prev.map((r) => (r.id === selectedRfq.id ? updatedRfq : r)));
+
+      // Reload audit history
+      const hist = await api.admin.getRfqHistory(selectedRfq.id);
+      setRfqHistory(hist.history || []);
+
+      if (res.emailSent) {
+        setRfqActionMessage("Status and response updated. Customer notified via email.");
+      } else if (notifyCustomerDraft) {
+        setRfqActionMessage("Status and response saved. Email logged/dispatched.");
+      } else {
+        setRfqActionMessage("Status and response saved (customer email notification skipped).");
+      }
+    } catch (err: any) {
+      setRfqActionError(err?.message || "Failed to update inquiry.");
+    } finally {
+      setSavingRfqAction(false);
+    }
+  };
+
+  const handleRetryNotification = async () => {
+    if (!selectedRfq) return;
+    setRetryingNotification(true);
+    setRfqActionMessage(null);
+    setRfqActionError(null);
+    try {
+      const res = await api.admin.retryRfqNotification(selectedRfq.id);
+      const hist = await api.admin.getRfqHistory(selectedRfq.id);
+      setRfqHistory(hist.history || []);
+      setRfqActionMessage(res.message || "Notification email re-sent successfully.");
+    } catch (err: any) {
+      setRfqActionError(err?.message || "Failed to re-send notification email.");
+    } finally {
+      setRetryingNotification(false);
     }
   };
 
@@ -378,13 +480,16 @@ function AdminConsolePage() {
         r.phone?.toLowerCase().includes(rfqSearch.toLowerCase()) ||
         r.items?.some((i) => i.product?.toLowerCase().includes(rfqSearch.toLowerCase()));
 
+      const rStatus = (r.status || "").toLowerCase();
+      const filterLower = rfqStatusFilter.toLowerCase();
       const matchesStatus =
         rfqStatusFilter === "all" ||
-        (rfqStatusFilter === "new" &&
-          (r.status.toLowerCase() === "new" ||
-            r.status.toLowerCase() === "submitted" ||
-            r.status.toLowerCase() === "pending review")) ||
-        r.status.toLowerCase() === rfqStatusFilter.toLowerCase();
+        (filterLower === "pending" &&
+          (rStatus === "pending" ||
+            rStatus === "new" ||
+            rStatus === "submitted" ||
+            rStatus === "pending review")) ||
+        rStatus === filterLower;
 
       return matchesSearch && matchesStatus;
     });
@@ -859,10 +964,11 @@ function AdminConsolePage() {
                     className="rounded-sm border border-border bg-card px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
                   >
                     <option value="all">All Statuses</option>
-                    <option value="new">New / Submitted</option>
-                    <option value="in progress">In Progress</option>
-                    <option value="responded">Responded</option>
-                    <option value="closed">Closed</option>
+                    <option value="Pending">Pending / New</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Awaiting Customer Response">Awaiting Customer Response</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Rejected">Rejected</option>
                   </select>
                 </div>
               </div>
@@ -1321,20 +1427,103 @@ function AdminConsolePage() {
               </button>
             </div>
 
-            {/* Quick Status Updater */}
-            <div className="mt-4 flex items-center justify-between rounded-sm border border-border bg-muted/20 p-3">
-              <span className="text-xs font-medium text-foreground">Update Inquiry Status:</span>
-              <select
-                value={selectedRfq.status}
-                onChange={(e) => handleUpdateRfqStatus(selectedRfq.id, e.target.value)}
-                className="rounded border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground outline-none focus:border-primary"
-              >
-                <option value="New">New</option>
-                <option value="Submitted">Submitted</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Responded">Responded</option>
-                <option value="Closed">Closed</option>
-              </select>
+            {/* Admin Action & Status Updater */}
+            <div className="mt-4 rounded-md border border-border/80 bg-muted/20 p-4 space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">
+                  Manage Request Status &amp; Customer Response
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Status:</span>
+                  <select
+                    value={adminStatusDraft}
+                    onChange={(e) => setAdminStatusDraft(e.target.value)}
+                    className="rounded border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Awaiting Customer Response">Awaiting Customer Response</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Customer Response */}
+              <div>
+                <label className="block text-[11px] font-medium text-foreground mb-1">
+                  Customer-Facing Response / Reply:
+                </label>
+                <textarea
+                  value={adminResponseDraft}
+                  onChange={(e) => setAdminResponseDraft(e.target.value)}
+                  placeholder="Type official response to customer (pricing, delivery time, material specifications)..."
+                  rows={3}
+                  className="w-full rounded border border-border bg-card p-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                />
+                <div className="mt-1.5 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="notifyCustomerCheckbox"
+                    checked={notifyCustomerDraft}
+                    onChange={(e) => setNotifyCustomerDraft(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="notifyCustomerCheckbox" className="text-xs text-muted-foreground select-none cursor-pointer">
+                    Send branded email notification to customer on update ({selectedRfq.email})
+                  </label>
+                </div>
+              </div>
+
+              {/* Internal Staff Notes */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-foreground">
+                    Internal Private Notes:
+                  </label>
+                  <span className="text-[10px] text-amber-500 font-mono">
+                    Staff Only — Never sent to customer
+                  </span>
+                </div>
+                <textarea
+                  value={adminNotesDraft}
+                  onChange={(e) => setAdminNotesDraft(e.target.value)}
+                  placeholder="Private notes (supplier costs, dispatch remarks, mill certificates)..."
+                  rows={2}
+                  className="w-full rounded border border-border bg-card/60 p-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              {/* Action Buttons & Feedback */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50">
+                <div className="text-xs">
+                  {rfqActionMessage ? (
+                    <span className="text-emerald-400 font-medium inline-flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {rfqActionMessage}
+                    </span>
+                  ) : null}
+                  {rfqActionError ? (
+                    <span className="text-red-400 font-medium inline-flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {rfqActionError}
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  disabled={savingRfqAction}
+                  onClick={handleSaveRfqDetails}
+                  className="inline-flex items-center gap-1.5 rounded bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
+                >
+                  {savingRfqAction ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Save &amp; Update Request
+                </button>
+              </div>
             </div>
 
             {/* Customer Details */}
@@ -1447,6 +1636,100 @@ function AdminConsolePage() {
                 </div>
               </div>
             ) : null}
+
+            {/* Request Activity History & Audit Log */}
+            <div className="mt-5 border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-mono text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Activity History &amp; Audit Trail
+                </h4>
+                {loadingRfqHistory ? (
+                  <span className="text-[10px] text-muted-foreground animate-pulse">Loading audit trail...</span>
+                ) : null}
+              </div>
+
+              {rfqHistory.length === 0 && !loadingRfqHistory ? (
+                <div className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                  No activity records logged for this inquiry yet.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {rfqHistory.map((act) => (
+                    <div
+                      key={act.id}
+                      className={`rounded border p-2.5 text-xs ${
+                        act.is_internal
+                          ? "border-amber-500/30 bg-amber-500/5"
+                          : "border-border bg-card/60"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="font-semibold text-foreground">
+                            {act.actor_name || (act.actor_type === "admin" ? "Admin Staff" : act.actor_type === "system" ? "System" : "Customer")}
+                          </span>
+                          <span className="text-muted-foreground">•</span>
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase font-mono text-muted-foreground">
+                            {act.action}
+                          </span>
+                          {act.is_internal ? (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                              Internal
+                            </span>
+                          ) : null}
+                        </div>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {formatKolkataTime(act.created_at)}
+                        </span>
+                      </div>
+
+                      {act.old_status && act.new_status && act.old_status !== act.new_status ? (
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                          <span className="text-muted-foreground">Status changed:</span>
+                          <span className="font-medium text-foreground">{act.old_status}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-semibold text-primary">{act.new_status}</span>
+                        </div>
+                      ) : null}
+
+                      {act.message ? (
+                        <p className="mt-1 text-xs text-foreground/90 whitespace-pre-wrap rounded bg-muted/20 p-1.5">
+                          {act.message}
+                        </p>
+                      ) : null}
+
+                      {/* Email Notification Status */}
+                      {!act.is_internal && act.action !== "SUBMITTED" ? (
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
+                          {act.email_sent ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[10px]">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Customer Email Sent
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 text-zinc-400 text-[10px]">
+                                <AlertCircle className="h-3 w-3" />
+                                Email Not Dispatched
+                              </span>
+                              <button
+                                type="button"
+                                disabled={retryingNotification}
+                                onClick={handleRetryNotification}
+                                className="text-[10px] font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                              >
+                                {retryingNotification ? "Retrying..." : "Retry Email"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
               <button

@@ -216,3 +216,34 @@ CREATE TABLE IF NOT EXISTS document_downloads (
   INDEX idx_doc_dl_email (email),
   INDEX idx_doc_dl_doc (doc_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 13. Password Reset Tokens Table
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  token_hash VARCHAR(128) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_pw_reset_user (user_id),
+  INDEX idx_pw_reset_hash (token_hash),
+  INDEX idx_pw_reset_exp (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14. Request Activity History Table (Audit Log & Customer Notifications)
+CREATE TABLE IF NOT EXISTS request_activity_history (
+  id VARCHAR(64) PRIMARY KEY,
+  request_id VARCHAR(64) NOT NULL,
+  actor_type VARCHAR(20) NOT NULL,
+  actor_id VARCHAR(64) NULL,
+  actor_name VARCHAR(255) NULL,
+  action VARCHAR(50) NOT NULL,
+  old_status VARCHAR(50) NULL,
+  new_status VARCHAR(50) NULL,
+  message TEXT NULL,
+  is_internal TINYINT(1) NOT NULL DEFAULT 0,
+  email_sent TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_req_history_req (request_id),
+  INDEX idx_req_history_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

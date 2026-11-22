@@ -239,3 +239,35 @@ CREATE TABLE IF NOT EXISTS admin_activity_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_logs_admin ON admin_activity_logs(admin_id);
+
+-- 14. Password Reset Tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pw_reset_hash ON password_reset_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_pw_reset_user ON password_reset_tokens(user_id);
+
+-- 15. Request Activity History (Audit Log & Customer Communications)
+CREATE TABLE IF NOT EXISTS request_activity_history (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  actor_type TEXT NOT NULL,
+  actor_id TEXT,
+  actor_name TEXT,
+  action TEXT NOT NULL,
+  old_status TEXT,
+  new_status TEXT,
+  message TEXT,
+  is_internal INTEGER NOT NULL DEFAULT 0,
+  email_sent INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_req_history_request ON request_activity_history(request_id);
+CREATE INDEX IF NOT EXISTS idx_req_history_created ON request_activity_history(created_at);

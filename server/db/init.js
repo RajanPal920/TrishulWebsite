@@ -97,6 +97,8 @@ export async function initDatabase() {
     "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
     'ALTER TABLE product_requests ADD COLUMN quotation_amount REAL',
     'ALTER TABLE material_requests ADD COLUMN quotation_amount REAL',
+    'ALTER TABLE rfq_requests ADD COLUMN admin_response TEXT',
+    'ALTER TABLE rfq_requests ADD COLUMN admin_notes TEXT',
   ];
   for (const m of migrations) {
     try {
@@ -112,9 +114,11 @@ export async function initDatabase() {
     sqliteDb.run("ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password';", () => {});
     sqliteDb.run("ALTER TABLE users ADD COLUMN last_login_at TEXT;", () => {});
     sqliteDb.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer';", () => {});
+    sqliteDb.run("ALTER TABLE rfq_requests ADD COLUMN admin_response TEXT;", () => {});
+    sqliteDb.run("ALTER TABLE rfq_requests ADD COLUMN admin_notes TEXT;", () => {});
   }
 
-  // Ensure document_downloads & cad_downloads tables exist
+  // Ensure document_downloads, cad_downloads, password_reset_tokens & request_activity_history tables exist
   try {
     await run(`
       CREATE TABLE IF NOT EXISTS document_downloads (
@@ -135,6 +139,32 @@ export async function initDatabase() {
         email VARCHAR(255) NOT NULL,
         name VARCHAR(255) NULL,
         company VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        token_hash VARCHAR(128) NOT NULL UNIQUE,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS request_activity_history (
+        id VARCHAR(64) PRIMARY KEY,
+        request_id VARCHAR(64) NOT NULL,
+        actor_type VARCHAR(20) NOT NULL,
+        actor_id VARCHAR(64) NULL,
+        actor_name VARCHAR(255) NULL,
+        action VARCHAR(50) NOT NULL,
+        old_status VARCHAR(50) NULL,
+        new_status VARCHAR(50) NULL,
+        message TEXT NULL,
+        is_internal BOOLEAN NOT NULL DEFAULT 0,
+        email_sent BOOLEAN NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);

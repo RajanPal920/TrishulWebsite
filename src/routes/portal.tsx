@@ -19,6 +19,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Trash2,
+  MessageSquare,
 } from "lucide-react";
 import { Breadcrumbs, Section } from "@/components/site/parts";
 import { useAuth } from "@/hooks/useAuth";
@@ -72,16 +73,16 @@ function formatKolkataTime(isoString?: string | null) {
 }
 
 function getStatusBadge(status?: string | null) {
-  const s = (status || "submitted").toLowerCase();
-  if (s.includes("responded") || s.includes("quoted") || s.includes("approved") || s.includes("resolved")) {
+  const s = (status || "Pending").toLowerCase();
+  if (s === "resolved" || s.includes("responded") || s.includes("quoted") || s.includes("approved")) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
         <CheckCircle2 className="h-3 w-3" />
-        {status || "Responded"}
+        {status || "Resolved"}
       </span>
     );
   }
-  if (s.includes("progress") || s.includes("review")) {
+  if (s === "in progress" || s.includes("progress") || s.includes("review")) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-400">
         <Clock className="h-3 w-3" />
@@ -89,18 +90,26 @@ function getStatusBadge(status?: string | null) {
       </span>
     );
   }
-  if (s.includes("closed") || s.includes("cancelled")) {
+  if (s === "awaiting customer response" || s.includes("awaiting")) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-800/80 px-2.5 py-0.5 text-xs font-medium text-zinc-300">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-400">
+        <Mail className="h-3 w-3" />
+        {status || "Awaiting Customer Response"}
+      </span>
+    );
+  }
+  if (s === "rejected" || s.includes("closed") || s.includes("cancelled")) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-400">
         <AlertCircle className="h-3 w-3" />
-        {status || "Closed"}
+        {status || "Rejected"}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 text-xs font-medium text-sky-400">
       <Clock className="h-3 w-3" />
-      {status || "New"}
+      {status || "Pending"}
     </span>
   );
 }
@@ -119,6 +128,21 @@ function CustomerPortalPage() {
   const [searchFilter, setSearchFilter] = useState("");
   const [selectedRfq, setSelectedRfq] = useState<RfqInquiryItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [rfqHistory, setRfqHistory] = useState<any[]>([]);
+  const [loadingRfqHistory, setLoadingRfqHistory] = useState(false);
+
+  useEffect(() => {
+    if (selectedRfq) {
+      setLoadingRfqHistory(true);
+      api.customer
+        .getRfqHistory(selectedRfq.id)
+        .then((res) => setRfqHistory(res.history || []))
+        .catch(() => setRfqHistory([]))
+        .finally(() => setLoadingRfqHistory(false));
+    } else {
+      setRfqHistory([]);
+    }
+  }, [selectedRfq?.id]);
 
   // Profile Form state
   const [profileName, setProfileName] = useState("");
@@ -724,6 +748,19 @@ function CustomerPortalPage() {
               </button>
             </div>
 
+            {/* Official Trishul Metals & Alloys Response */}
+            {selectedRfq.admin_response ? (
+              <div className="mt-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                  <MessageSquare className="h-4 w-4" />
+                  Official Trishul Metals &amp; Alloys Response:
+                </div>
+                <p className="mt-2 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                  {selectedRfq.admin_response}
+                </p>
+              </div>
+            ) : null}
+
             {/* Line items */}
             <div className="mt-5">
               <h4 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Inquiry Line Items</h4>
@@ -834,6 +871,60 @@ function CustomerPortalPage() {
                 </div>
               </div>
             ) : null}
+
+            {/* Inquiry Updates Timeline */}
+            <div className="mt-5 border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-mono text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Inquiry Status &amp; Updates Timeline
+                </h4>
+                {loadingRfqHistory ? (
+                  <span className="text-[10px] text-muted-foreground animate-pulse">Loading updates...</span>
+                ) : null}
+              </div>
+
+              {rfqHistory.length === 0 && !loadingRfqHistory ? (
+                <div className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                  Inquiry submitted. Our technical sales team is reviewing your requirements.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {rfqHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded border border-border bg-card/60 p-2.5 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="font-semibold text-foreground">
+                            {item.action === "STATUS_CHANGED" ? "Status Updated" : item.action === "ADMIN_REPLY" ? "Response Received" : "Inquiry Submitted"}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {formatKolkataTime(item.created_at)}
+                        </span>
+                      </div>
+
+                      {item.old_status && item.new_status && item.old_status !== item.new_status ? (
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                          <span className="text-muted-foreground">Status:</span>
+                          <span className="font-medium text-foreground">{item.old_status}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-semibold text-primary">{item.new_status}</span>
+                        </div>
+                      ) : null}
+
+                      {item.message ? (
+                        <p className="mt-1 text-xs text-foreground/90 whitespace-pre-wrap rounded bg-muted/20 p-1.5">
+                          {item.message}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Modal Actions */}
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
