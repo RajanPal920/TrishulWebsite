@@ -148,7 +148,10 @@ router.post('/register', async (req, res) => {
         });
       }
 
-      return res.status(409).json({ error: 'An account with this email already exists. Please sign in below.' });
+      return res.status(409).json({
+        error: 'An account with this email already exists. Please sign in instead.',
+        code: 'ACCOUNT_ALREADY_EXISTS',
+      });
     }
 
     const passwordHash = await bcrypt.hash(password.trim(), 10);
@@ -265,25 +268,35 @@ router.post('/login', async (req, res) => {
     }
 
     if (!user) {
-      console.warn(`[Login] User not found: ${cleanEmail}`);
-      return res.status(401).json({ error: 'Invalid work email or password.' });
+      console.warn(`[Login] Customer account not found: ${cleanEmail}`);
+      return res.status(404).json({
+        error: 'Your account was not found. It looks like your account does not exist in our database. Would you like to create your account again?',
+        code: 'ACCOUNT_NOT_FOUND',
+      });
     }
 
     if (!user.password_hash) {
       console.warn(`[Login] User ${cleanEmail} has null password_hash`);
       return res.status(401).json({
         error: 'This account was registered via Google Sign-In and does not have a password set. Please sign in with Google or use Create Account to set a password.',
+        code: 'GOOGLE_ACCOUNT_NO_PASSWORD',
       });
     }
 
     if (user.status && user.status.toLowerCase() === 'inactive') {
-      return res.status(403).json({ error: 'Your account is currently inactive. Please contact support.' });
+      return res.status(403).json({
+        error: 'Your account is currently inactive. Please contact support.',
+        code: 'ACCOUNT_INACTIVE',
+      });
     }
 
     const matches = await bcrypt.compare(password.trim(), user.password_hash);
     if (!matches) {
       console.warn(`[Login] Password mismatch for: ${cleanEmail}`);
-      return res.status(401).json({ error: 'Invalid work email or password.' });
+      return res.status(401).json({
+        error: 'Incorrect email or password. Please check your credentials and try again.',
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
     const now = new Date().toISOString();
@@ -328,7 +341,10 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('[Login Error]:', err);
-    return res.status(500).json({ error: 'An error occurred during sign in. Please try again.' });
+    return res.status(500).json({
+      error: 'Something went wrong. Please try again later.',
+      code: 'SERVER_ERROR',
+    });
   }
 });
 

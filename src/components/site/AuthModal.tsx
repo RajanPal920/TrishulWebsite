@@ -15,11 +15,22 @@ export function AuthModal() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [accountNotFound, setAccountNotFound] = useState(false);
 
   // Reset errors when mode changes
   const handleModeChange = (newMode: "signin" | "signup") => {
     setMode(newMode);
     setError(null);
+    setNotice(null);
+    setAccountNotFound(false);
+  };
+
+  const handleCreateAccountAgain = () => {
+    setMode("signup");
+    setError(null);
+    setAccountNotFound(false);
+    setNotice("Please complete your account registration below.");
   };
 
   const onSuccess = useCallback(() => {
@@ -32,15 +43,41 @@ export function AuthModal() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
+    setAccountNotFound(false);
     setBusy(true);
+
+    const cleanEmail = email.trim();
+
     try {
-      await login(email, password);
+      await login(cleanEmail, password);
       setEmail("");
       setPassword("");
       onSuccess();
     } catch (err: any) {
       setPassword("");
-      setError(err?.message || "Invalid work email or password.");
+      const status = err?.status;
+      const code = err?.data?.code;
+      const msg = err?.data?.error || err?.message || "";
+
+      if (
+        status === 404 ||
+        code === "ACCOUNT_NOT_FOUND" ||
+        msg.includes("does not exist") ||
+        msg.includes("account was not found")
+      ) {
+        setAccountNotFound(true);
+        setError("Your account was not found. It looks like your account does not exist in our database. Would you like to create your account again?");
+      } else if (status === 401 || code === "INVALID_CREDENTIALS") {
+        setAccountNotFound(false);
+        setError("Incorrect email or password. Please check your credentials and try again.");
+      } else if (status >= 500 || code === "SERVER_ERROR") {
+        setAccountNotFound(false);
+        setError("Something went wrong. Please try again later.");
+      } else {
+        setAccountNotFound(false);
+        setError(msg || "Incorrect email or password. Please check your credentials and try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -49,6 +86,8 @@ export function AuthModal() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
+    setAccountNotFound(false);
 
     if (!fullName.trim() || fullName.trim().length < 2) {
       setError("Please enter your full name (minimum 2 characters).");
@@ -82,12 +121,12 @@ export function AuthModal() {
     setBusy(true);
     try {
       await register({
-        fullName,
-        email,
+        fullName: fullName.trim(),
+        email: email.trim(),
         password,
         confirmPassword,
-        company,
-        phone,
+        company: company.trim(),
+        phone: phone.trim(),
       });
       setPassword("");
       setConfirmPassword("");
@@ -95,7 +134,19 @@ export function AuthModal() {
     } catch (err: any) {
       setPassword("");
       setConfirmPassword("");
-      setError(err?.message || "Registration failed. Please check your information.");
+      const status = err?.status;
+      const code = err?.data?.code;
+      const msg = err?.data?.error || err?.message || "Registration failed. Please check your information.";
+
+      if (status === 409 || code === "ACCOUNT_ALREADY_EXISTS" || msg.toLowerCase().includes("already exists")) {
+        setMode("signin");
+        setError(null);
+        setNotice("An account with this email already exists. Please sign in instead.");
+      } else if (status >= 500) {
+        setError("Something went wrong. Please try again later.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -133,9 +184,34 @@ export function AuthModal() {
         </div>
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+          <div className="mt-4 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="leading-relaxed font-medium">{error}</p>
+                {accountNotFound && (
+                  <div className="mt-2.5 pt-2 border-t border-destructive/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <span className="text-[11px] text-destructive/80 font-normal">
+                      Email: <strong>{email.trim()}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCreateAccountAgain}
+                      className="inline-flex items-center gap-1 rounded-sm bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none"
+                    >
+                      <span>Create Account Again</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {notice && (
+          <div className="mt-4 rounded-sm border border-primary/30 bg-primary/10 p-3 text-xs text-primary flex items-start justify-between gap-2">
+            <span>{notice}</span>
           </div>
         )}
 

@@ -55,6 +55,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [accountNotFound, setAccountNotFound] = useState(false);
 
   // Forgot password modal
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -73,6 +74,14 @@ function AuthPage() {
     setMode(newMode);
     setError(null);
     setNotice(null);
+    setAccountNotFound(false);
+  };
+
+  const handleCreateAccountAgain = () => {
+    setMode("signup");
+    setError(null);
+    setAccountNotFound(false);
+    setNotice("Please complete your account registration below.");
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -80,29 +89,48 @@ function AuthPage() {
     if (busy) return; // Prevent duplicate submissions
     setError(null);
     setNotice(null);
+    setAccountNotFound(false);
     setBusy(true);
 
+    const cleanEmail = email.trim();
+
     try {
-      await login(email.trim(), password);
+      await login(cleanEmail, password);
       setEmail("");
       setPassword("");
       void navigate({ to: targetUrl });
     } catch (err: any) {
       setPassword("");
       const status = err?.status;
-      const msg = err?.message || "";
-      if (status === 401) {
-        setError(msg || "Invalid work email or password. Please verify your credentials.");
-      } else if (status === 403) {
+      const code = err?.data?.code;
+      const msg = err?.data?.error || err?.message || "";
+
+      if (
+        status === 404 ||
+        code === "ACCOUNT_NOT_FOUND" ||
+        msg.includes("does not exist") ||
+        msg.includes("account was not found")
+      ) {
+        setAccountNotFound(true);
+        setError("Your account was not found. It looks like your account does not exist in our database. Would you like to create your account again?");
+      } else if (status === 401 || code === "INVALID_CREDENTIALS") {
+        setAccountNotFound(false);
+        setError("Incorrect email or password. Please check your credentials and try again.");
+      } else if (status === 403 || code === "ACCOUNT_INACTIVE") {
+        setAccountNotFound(false);
         setError(msg || "Your account is currently inactive. Please contact customer support.");
       } else if (status === 429) {
+        setAccountNotFound(false);
         setError("Too many sign-in attempts. Please wait a few moments before trying again.");
-      } else if (status >= 500) {
-        setError("A temporary server error occurred. Our team has been notified. Please try again shortly.");
+      } else if (status >= 500 || code === "SERVER_ERROR") {
+        setAccountNotFound(false);
+        setError("Something went wrong. Please try again later.");
       } else if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setAccountNotFound(false);
         setError("Network error: Unable to connect to the authentication server. Please check your connection.");
       } else {
-        setError(msg || "Invalid work email or password.");
+        setAccountNotFound(false);
+        setError(msg || "Incorrect email or password. Please check your credentials and try again.");
       }
     } finally {
       setBusy(false);
@@ -113,6 +141,7 @@ function AuthPage() {
     e.preventDefault();
     setError(null);
     setNotice(null);
+    setAccountNotFound(false);
 
     const cleanFullName = fullName.trim();
     const cleanEmail = email.trim();
@@ -164,10 +193,16 @@ function AuthPage() {
     } catch (err: any) {
       setPassword("");
       setConfirmPassword("");
-      const msg = err?.message || "Registration failed. Please check your information.";
-      if (msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("sign in")) {
+      const status = err?.status;
+      const code = err?.data?.code;
+      const msg = err?.data?.error || err?.message || "Registration failed. Please check your information.";
+
+      if (status === 409 || code === "ACCOUNT_ALREADY_EXISTS" || msg.toLowerCase().includes("already exists")) {
         setMode("signin");
-        setNotice("An account with this email already exists. Please enter your password to sign in.");
+        setError(null);
+        setNotice("An account with this email already exists. Please sign in instead.");
+      } else if (status >= 500) {
+        setError("Something went wrong. Please try again later.");
       } else {
         setError(msg);
       }
@@ -230,13 +265,39 @@ function AuthPage() {
 
           {/* Notification Messages */}
           {error && (
-            <div className="mb-4 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-              {error}
+            <div className="mb-4 rounded-sm border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
+              <p className="leading-relaxed font-medium">{error}</p>
+              {accountNotFound && (
+                <div className="mt-3 pt-3 border-t border-destructive/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <span className="text-[11px] text-destructive/80 font-normal">
+                    Email: <strong>{email.trim()}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCreateAccountAgain}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <span>Create Account Again</span>
+                    <span aria-hidden="true">&rarr;</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {notice && (
-            <div className="mb-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary">
-              {notice}
+            <div className="mb-4 rounded-sm border border-primary/40 bg-primary/10 p-3 text-xs text-primary flex items-start justify-between gap-2">
+              <span>{notice}</span>
+              {mode === "signin" && notice.includes("already exists") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                  }}
+                  className="shrink-0 underline font-semibold hover:opacity-80"
+                >
+                  Enter password below
+                </button>
+              )}
             </div>
           )}
 
