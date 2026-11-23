@@ -64,8 +64,18 @@ export function getEmailTransporter() {
 }
 
 export function getDefaultFromAddress() {
-  if (process.env.EMAIL_FROM) {
-    return process.env.EMAIL_FROM;
+  let from = process.env.EMAIL_FROM;
+  if (from) {
+    from = from.trim();
+    // Normalize if user wrapped whole string in quotes like "Name <email@domain.com>"
+    if (from.startsWith('"') && from.endsWith('"') && from.includes('<') && from.includes('>')) {
+      const inner = from.slice(1, -1).trim();
+      const match = inner.match(/^(.*?)\s*<([^>]+)>$/);
+      if (match) {
+        from = `"${match[1].trim()}" <${match[2].trim()}>`;
+      }
+    }
+    return from;
   }
   if (process.env.GMAIL_USER) {
     return `"Trishul Metals & Alloys" <${process.env.GMAIL_USER.trim()}>`;

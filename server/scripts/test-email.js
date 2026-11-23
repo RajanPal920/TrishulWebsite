@@ -29,11 +29,16 @@ if (fs.existsSync(envPath)) {
 import { sendEmail, getEmailConfigStatus, maskEmail } from '../services/email.js';
 
 async function main() {
-  const targetEmail = process.argv[2] || 'rajanp9209022@gmail.com';
+  const targetEmail = process.argv[2];
+  if (!targetEmail) {
+    console.error('[Usage Error]: Please provide an email address to test.');
+    console.error('Example: node server/scripts/test-email.js customer@example.com');
+    process.exit(1);
+  }
   console.log('====================================================');
   console.log('TRISHUL METALS & ALLOYS - REAL EMAIL DIAGNOSTIC TEST');
   console.log('====================================================');
-  console.log(`Target Recipient: ${maskEmail(targetEmail)} (${targetEmail})`);
+  console.log(`Target Customer Recipient: ${maskEmail(targetEmail)} (${targetEmail})`);
 
   const config = getEmailConfigStatus();
   console.log('\n[Provider Status]:', {
