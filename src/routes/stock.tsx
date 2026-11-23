@@ -48,9 +48,10 @@ function StockPage() {
       // Priority 1: Fetch via live REST endpoint /api/stock (works directly on Vercel and local)
       try {
         const isClient = typeof window !== "undefined";
-        const url = isClient
-          ? "/api/stock"
-          : `${process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:8080")}/api/stock`;
+        const envAppUrl = typeof process !== "undefined" && process.env ? process.env["APP_URL"] : undefined;
+        const envVercelUrl = typeof process !== "undefined" && process.env ? process.env["VERCEL_URL"] : undefined;
+        const host = envAppUrl || (envVercelUrl ? `https://${envVercelUrl}` : "http://localhost:8080");
+        const url = isClient ? "/api/stock" : `${host}/api/stock`;
         const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();

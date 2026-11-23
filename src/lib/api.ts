@@ -649,8 +649,8 @@ export const api = {
         notes?: string;
         notify_customer?: boolean;
       }
-    ): Promise<{ success: boolean; message: string; rfq: any; emailSent?: boolean }> {
-      return request<{ success: boolean; message: string; rfq: any; emailSent?: boolean }>(`/api/admin/rfqs/${id}`, {
+    ): Promise<{ success: boolean; message: string; rfq: any; emailSent?: boolean; emailError?: string }> {
+      return request<{ success: boolean; message: string; rfq: any; emailSent?: boolean; emailError?: string }>(`/api/admin/rfqs/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       });

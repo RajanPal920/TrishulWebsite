@@ -37,9 +37,8 @@ export const getStockItems = createServerFn({ method: "GET" }).handler(
 
     // 2. Fetch from Express API endpoint if running with accessible local host
     try {
-      const baseUrl = typeof process !== "undefined" && process.env?.VITE_APP_URL
-        ? process.env.VITE_APP_URL
-        : "http://127.0.0.1:5001";
+      const envUrl = typeof process !== "undefined" && process.env ? process.env["VITE_APP_URL"] : undefined;
+      const baseUrl = envUrl || "http://127.0.0.1:5001";
       const res = await fetch(`${baseUrl}/api/stock`);
       if (res.ok) {
         const json = await res.json();
