@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { SEED_STOCK_ITEMS } from "@/data/stock.seed";
 
 export interface StockRow {
   id: string;
@@ -42,13 +43,14 @@ export const getStockItems = createServerFn({ method: "GET" }).handler(
       const res = await fetch(`${baseUrl}/api/stock`);
       if (res.ok) {
         const json = await res.json();
-        if (Array.isArray(json.stock)) {
+        if (Array.isArray(json.stock) && json.stock.length > 0) {
           return json.stock as StockRow[];
         }
       }
     } catch {}
 
-    return [];
+    // 3. Fallback to production inventory seed
+    return SEED_STOCK_ITEMS;
   }
 );
 

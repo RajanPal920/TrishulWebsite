@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Search, X, RotateCcw, AlertCircle, ArrowRight } from "lucide-react";
 import { Section, SectionHead, Breadcrumbs, CtaBand } from "@/components/site/parts";
 import { getStockItems, type StockRow } from "@/lib/stock.functions";
+import { SEED_STOCK_ITEMS } from "@/data/stock.seed";
 import { api } from "@/lib/api";
 import { company } from "@/data/company";
 
@@ -40,10 +41,17 @@ function StockPage() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["stock-items"],
+    initialData: SEED_STOCK_ITEMS,
+    staleTime: 15 * 1000,
+    refetchOnMount: "always",
     queryFn: async (): Promise<StockRow[]> => {
       // Priority 1: Fetch via live REST endpoint /api/stock (works directly on Vercel and local)
       try {
-        const res = await fetch("/api/stock");
+        const isClient = typeof window !== "undefined";
+        const url = isClient
+          ? "/api/stock"
+          : `${process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:8080")}/api/stock`;
+        const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.stock) && json.stock.length > 0) {
@@ -74,13 +82,12 @@ function StockPage() {
         console.warn("[Stock ServerFn Notice]:", fnErr);
       }
 
-      return [];
+      return SEED_STOCK_ITEMS;
     },
-    staleTime: 60 * 1000,
     retry: 2,
   });
 
-  const rows = data ?? [];
+  const rows = data && data.length > 0 ? data : SEED_STOCK_ITEMS;
   const categories = useMemo(
     () => Array.from(new Set(rows.map((r) => r.category).filter(Boolean))).sort(),
     [rows],
