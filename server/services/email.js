@@ -7,10 +7,24 @@ let cachedTransporter = null;
 export function getEmailTransporter() {
   if (cachedTransporter) return cachedTransporter;
 
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+  // Direct Gmail App Password integration
+  const gmailUser = process.env.GMAIL_USER || (process.env.SMTP_USER?.includes('@gmail.com') ? process.env.SMTP_USER : null);
+  const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD;
+  if (gmailUser && gmailPass) {
+    cachedTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: gmailUser,
+        pass: gmailPass,
+      },
+    });
+    return cachedTransporter;
+  }
+
+  const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+  const port = parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '587', 10);
+  const user = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.EMAIL_PASSWORD;
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   if (host && user && pass) {
@@ -139,6 +153,33 @@ export async function sendEmail({ to, subject, html, text }) {
 }
 
 /**
+ * Diagnostic helper to check current email provider configuration status safely (no secrets revealed)
+ */
+export function getEmailConfigStatus() {
+  const hasResend = Boolean(process.env.RESEND_API_KEY);
+  const hasGmail = Boolean(process.env.GMAIL_USER && (process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD));
+  const hasSmtp = Boolean(
+    (process.env.SMTP_HOST || process.env.EMAIL_HOST) &&
+    (process.env.SMTP_USER || process.env.EMAIL_USER) &&
+    (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.EMAIL_PASSWORD)
+  );
+
+  let activeProvider = 'unconfigured';
+  if (hasResend) activeProvider = 'resend';
+  else if (hasGmail) activeProvider = 'gmail';
+  else if (hasSmtp) activeProvider = 'smtp';
+
+  return {
+    configured: hasResend || hasGmail || hasSmtp,
+    provider: activeProvider,
+    fromAddress: getDefaultFromAddress(),
+    smtpHost: process.env.SMTP_HOST ? `${process.env.SMTP_HOST}:${process.env.SMTP_PORT || '587'}` : null,
+    hasResendKey: hasResend,
+    hasSmtpUser: Boolean(process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER),
+  };
+}
+
+/**
  * Common HTML Email wrapper template matching Trishul Metals & Alloys brand
  */
 function renderBrandedEmailTemplate({ title, greeting, intro, contentHtml, actionButton, footerNotes }) {
@@ -198,38 +239,38 @@ function renderBrandedEmailTemplate({ title, greeting, intro, contentHtml, actio
 export async function sendPasswordResetEmail({ to, customerName, resetToken, baseUrl, req }) {
   const publicUrl = baseUrl || getPublicAppUrl(req);
   const resetUrl = `${publicUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(resetToken)}`;
-  const subject = 'Reset Your Trishul Metals Account Password';
+  const subject = 'Password Reset Request – Trishul Metals & Alloys';
 
   const html = renderBrandedEmailTemplate({
-    title: 'Reset Your Password — Trishul Metals & Alloys',
-    greeting: `Hello ${customerName || 'Customer'},`,
-    intro: 'We received a request to reset the password for your Trishul Metals & Alloys account.',
+    title: 'Password Reset Request – Trishul Metals & Alloys',
+    greeting: customerName ? `Hello ${customerName},` : 'Hello,',
+    intro: 'We received a request to reset your Trishul Metals & Alloys account password.',
     contentHtml: `
       <div class="box">
-        <p class="paragraph" style="margin: 0;">Click the button below to establish a new password for your work email (<strong>${to}</strong>):</p>
+        <p class="paragraph" style="margin: 0; color: #e4e4e7;">
+          Click the button below to securely reset your password for your registered account:
+        </p>
       </div>
     `,
     actionButton: {
-      label: 'Reset Password',
+      label: 'RESET MY PASSWORD',
       url: resetUrl,
     },
-    footerNotes: `This link is valid for <strong>30 minutes</strong> and can only be used once. If you did not request a password change, you can safely ignore this email — your existing password remains completely secure.<br><br>Direct link: <a href="${resetUrl}" style="color: #d4af37; word-break: break-all;">${resetUrl}</a>`,
+    footerNotes: `This link is valid for a limited time (30 minutes) and can only be used once.<br>If you did not request this password reset, you can safely ignore this email.<br><br>Regards,<br><strong>Trishul Metals & Alloys</strong><br><a href="mailto:export@trishulmetal.com" style="color: #d4af37;">export@trishulmetal.com</a><br><br>Direct link: <a href="${resetUrl}" style="color: #d4af37; word-break: break-all;">${resetUrl}</a>`,
   });
 
-  const text = `Hello ${customerName || 'Customer'},
+  const text = `Hello,
 
-We received a request to reset the password for your Trishul Metals & Alloys account.
-
-Click the secure link below to create a new password:
+We received a request to reset your Trishul Metals & Alloys account password.
+Click the button below to securely reset your password:
 ${resetUrl}
 
-This link is valid for 30 minutes and can only be used once.
-
-If you did not request this change, you can safely ignore this email.
+This link is valid for a limited time and can only be used once.
+If you did not request this password reset, you can safely ignore this email.
 
 Regards,
 Trishul Metals & Alloys
-export@trishulmetal.com | +91 79772 81567`;
+export@trishulmetal.com`;
 
   return sendEmail({ to, subject, html, text });
 }

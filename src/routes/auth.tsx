@@ -354,7 +354,10 @@ function AuthPage() {
               <div className="flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowForgotModal(true)}
+                  onClick={() => {
+                    if (email) setForgotEmail(email);
+                    setShowForgotModal(true);
+                  }}
                   className="text-xs text-primary transition-colors hover:underline"
                 >
                   Forgot your password?

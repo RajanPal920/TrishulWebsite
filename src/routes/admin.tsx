@@ -182,10 +182,38 @@ function AdminConsolePage() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // Admin Forgot Password state
+  const [showAdminForgot, setShowAdminForgot] = useState(false);
+  const [adminForgotEmail, setAdminForgotEmail] = useState("admin@trishulmetal.com");
+  const [adminForgotBusy, setAdminForgotBusy] = useState(false);
+  const [adminForgotSuccess, setAdminForgotSuccess] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<{
+    configured: boolean;
+    provider: string;
+    fromAddress: string;
+    smtpHost: string | null;
+  } | null>(null);
+
+  const handleAdminForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminForgotBusy) return;
+    setAdminForgotBusy(true);
+    try {
+      await api.auth.forgotPassword(adminForgotEmail.trim());
+      setAdminForgotSuccess(true);
+    } catch {
+      setAdminForgotSuccess(true);
+    } finally {
+      setAdminForgotBusy(false);
+    }
+  };
+
   const fetchAdminData = async () => {
     if (!user || user.role !== "admin") return;
     setLoadingData(true);
     try {
+      api.admin.getEmailStatus().then(setEmailStatus).catch(() => null);
+
       const [ovRes, rfqsRes, custRes] = await Promise.all([
         api.admin.getOverview().catch(() => null),
         api.admin.getRfqs().catch(() => ({ rfqs: [] })),
@@ -618,6 +646,18 @@ function AdminConsolePage() {
                   {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <div className="mt-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminForgot(true);
+                    setAdminForgotSuccess(false);
+                  }}
+                  className="text-xs text-primary hover:underline transition-colors"
+                >
+                  Forgot administrator password?
+                </button>
+              </div>
             </div>
 
             <button
@@ -644,6 +684,81 @@ function AdminConsolePage() {
               &larr; Return to Trishul Metals Public Site
             </Link>
           </div>
+
+          {/* Admin Forgot Password Modal */}
+          {showAdminForgot && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+              <div className="w-full max-w-sm rounded-sm border border-border bg-card p-6 shadow-xl">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
+                    Admin Password Recovery
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminForgot(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {adminForgotSuccess ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-sm border border-primary/30 bg-primary/10 p-3.5 text-xs text-primary">
+                      <p className="font-semibold text-foreground">Password reset link dispatched</p>
+                      <p className="mt-1 leading-relaxed text-zinc-300">
+                        If an administrator account exists for {adminForgotEmail}, a secure password reset link has been dispatched. Please check your inbox and spam folder.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAdminForgot(false);
+                        setAdminForgotSuccess(false);
+                      }}
+                      className="w-full rounded-sm bg-primary py-2 text-xs font-bold uppercase tracking-wider text-primary-foreground hover:opacity-90"
+                    >
+                      Back to Administrator Login
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleAdminForgotPassword} className="mt-4 space-y-3">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Enter the registered administrator email. A secure 30-minute single-use reset link will be generated.
+                    </p>
+
+                    <div>
+                      <label className="block text-xs font-medium text-foreground">Administrator Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={adminForgotEmail}
+                        onChange={(e) => setAdminForgotEmail(e.target.value)}
+                        className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-zinc-400 outline-none focus:border-primary"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminForgot(false)}
+                        className="flex-1 rounded-sm border border-border py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={adminForgotBusy}
+                        className="flex-1 rounded-sm bg-primary py-2 text-xs font-bold uppercase tracking-wider text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                      >
+                        {adminForgotBusy ? "Sending…" : "Send Reset Link"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1432,6 +1547,50 @@ function AdminConsolePage() {
                     Sign Out of Admin Console
                   </button>
                 </div>
+              </div>
+
+              {/* Email Notification Provider Status Card */}
+              <div className="rounded-md border border-border bg-card p-6 shadow-sm">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Email Notification Provider</h3>
+                    <p className="text-[11px] text-muted-foreground">Real email dispatch status for status updates &amp; password resets</p>
+                  </div>
+                  {emailStatus?.configured ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400 uppercase">
+                      <CheckCircle2 className="h-3 w-3" /> Active ({emailStatus.provider})
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400 uppercase">
+                      <AlertCircle className="h-3 w-3" /> Needs Configuration
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between border-b border-border/50 pb-1.5">
+                    <span>Provider Engine:</span>
+                    <span className="font-mono uppercase text-foreground">{emailStatus?.provider || "unconfigured"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/50 pb-1.5">
+                    <span>From Address:</span>
+                    <span className="font-mono text-foreground">{emailStatus?.fromAddress || "export@trishulmetal.com"}</span>
+                  </div>
+                  {emailStatus?.smtpHost ? (
+                    <div className="flex justify-between border-b border-border/50 pb-1.5">
+                      <span>SMTP Host:</span>
+                      <span className="font-mono text-foreground">{emailStatus.smtpHost}</span>
+                    </div>
+                  ) : null}
+                </div>
+                {!emailStatus?.configured && (
+                  <div className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-300">
+                    <p className="font-semibold text-amber-200">Real email delivery requires environment variables in Vercel:</p>
+                    <ul className="mt-1.5 list-disc pl-4 space-y-0.5 text-[10px] text-amber-300/90 font-mono">
+                      <li>Option A: RESEND_API_KEY (Recommended)</li>
+                      <li>Option B: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           ) : null}

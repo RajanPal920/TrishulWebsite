@@ -1014,10 +1014,15 @@ async function handleForgotPasswordRequest(req, res) {
       return res.json(genericResponse);
     }
 
-    // Look up customer account
+    // Look up customer or admin account
+    let lookupEmail = cleanEmail;
+    if (lookupEmail === 'admin') {
+      lookupEmail = 'admin@trishulmetal.com';
+    }
+
     const user = await get(
       'SELECT id, email, full_name, role, status FROM users WHERE LOWER(email) = ?',
-      [cleanEmail]
+      [lookupEmail]
     );
 
     if (user && user.status !== 'inactive') {
@@ -1057,16 +1062,23 @@ async function handleForgotPasswordRequest(req, res) {
       const baseUrl = getPublicAppUrl(req);
 
       // Send the email with the secure link
-      await sendPasswordResetEmail({
+      const emailResult = await sendPasswordResetEmail({
         to: user.email,
         customerName: user.full_name,
         resetToken: rawToken,
         baseUrl,
       }).catch((emailErr) => {
         console.warn('[Password Reset Email Warning]:', emailErr.message);
+        return { success: false, error: emailErr.message };
       });
 
-      console.log(`[Auth] Issued secure password reset token for: ${cleanEmail}`);
+      if (!emailResult?.success) {
+        console.warn(
+          `[Auth Notice] Token generated for ${user.email}, but email was not sent: ${emailResult?.error || 'Provider not configured'}`
+        );
+      }
+
+      console.log(`[Auth] Issued secure password reset token for: ${user.email} (Email dispatch: ${emailResult?.success ? 'Delivered' : 'Failed/Unconfigured'})`);
     } else {
       console.log(`[Auth] Password reset requested for non-existent email: ${cleanEmail} (suppressed response)`);
     }

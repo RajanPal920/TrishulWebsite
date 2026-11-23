@@ -3,13 +3,21 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { get, all, run, sqliteDb } from '../db/connection.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendRequestStatusUpdateEmail, sendAdminReplyEmail, getPublicAppUrl } from '../services/email.js';
+import { sendRequestStatusUpdateEmail, sendAdminReplyEmail, getPublicAppUrl, getEmailConfigStatus } from '../services/email.js';
 
 const router = express.Router();
 
 // Strict security: All admin routes require authentication AND 'admin' role
 router.use(requireAuth);
 router.use(requireRole('admin'));
+
+/**
+ * GET /api/admin/email-status
+ * Diagnostic check of real email delivery provider status
+ */
+router.get('/email-status', (req, res) => {
+  return res.json(getEmailConfigStatus());
+});
 
 // Helper to log admin actions
 async function logAdminAction(admin, action, targetType, targetId = null, details = null, req = null) {

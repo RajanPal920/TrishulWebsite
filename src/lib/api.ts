@@ -702,6 +702,17 @@ export const api = {
       });
     },
 
+    async getEmailStatus(): Promise<{
+      configured: boolean;
+      provider: string;
+      fromAddress: string;
+      smtpHost: string | null;
+      hasResendKey: boolean;
+      hasSmtpUser: boolean;
+    }> {
+      return request('/api/admin/email-status');
+    },
+
     async changePassword(data: {
       currentPassword?: string;
       newPassword: string;

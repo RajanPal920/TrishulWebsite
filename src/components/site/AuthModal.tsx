@@ -1,12 +1,13 @@
 import { useState, useCallback } from "react";
-import { Shield, X, Mail, Lock, User, Building2, Phone, AlertCircle, ArrowRight } from "lucide-react";
+import { Shield, X, Mail, Lock, User, Building2, Phone, AlertCircle, ArrowRight, KeyRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 
 export function AuthModal() {
   const { authModalState, closeAuthModal, login, register } = useAuth();
   const { isOpen, options } = authModalState;
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -18,12 +19,21 @@ export function AuthModal() {
   const [notice, setNotice] = useState<string | null>(null);
   const [accountNotFound, setAccountNotFound] = useState(false);
 
+  // Forgot password state
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
   // Reset errors when mode changes
-  const handleModeChange = (newMode: "signin" | "signup") => {
+  const handleModeChange = (newMode: "signin" | "signup" | "forgot") => {
     setMode(newMode);
     setError(null);
     setNotice(null);
     setAccountNotFound(false);
+    setForgotSuccess(false);
+    if (newMode === "forgot" && email) {
+      setForgotEmail(email);
+    }
   };
 
   const handleCreateAccountAgain = () => {
@@ -152,6 +162,24 @@ export function AuthModal() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = forgotEmail.trim();
+    if (!clean) return;
+
+    setForgotBusy(true);
+    setError(null);
+    try {
+      await api.auth.forgotPassword(clean);
+      setForgotSuccess(true);
+    } catch {
+      // Safe generic success to prevent account enumeration
+      setForgotSuccess(true);
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -170,7 +198,9 @@ export function AuthModal() {
             <div>
               <h2 className="text-base font-bold text-foreground">Trishul Metals & Alloys</h2>
               <p className="text-xs text-muted-foreground">
-                {options?.promptMessage || "Sign in or create an account to proceed"}
+                {mode === "forgot"
+                  ? "Recover access to your account"
+                  : (options?.promptMessage || "Sign in or create an account to proceed")}
               </p>
             </div>
           </div>
@@ -215,31 +245,47 @@ export function AuthModal() {
           </div>
         )}
 
-        {/* Mode Tabs */}
-        <div className="grid grid-cols-2 gap-1 rounded-sm bg-muted/60 p-1 my-5">
-          <button
-            type="button"
-            onClick={() => handleModeChange("signin")}
-            className={`rounded-sm py-1.5 text-xs font-semibold transition-all ${
-              mode === "signin"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeChange("signup")}
-            className={`rounded-sm py-1.5 text-xs font-semibold transition-all ${
-              mode === "signup"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Create Account
-          </button>
-        </div>
+        {/* Mode Tabs (only when not in forgot mode) */}
+        {mode !== "forgot" ? (
+          <div className="grid grid-cols-2 gap-1 rounded-sm bg-muted/60 p-1 my-5">
+            <button
+              type="button"
+              onClick={() => handleModeChange("signin")}
+              className={`rounded-sm py-1.5 text-xs font-semibold transition-all ${
+                mode === "signin"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange("signup")}
+              className={`rounded-sm py-1.5 text-xs font-semibold transition-all ${
+                mode === "signup"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+        ) : (
+          <div className="my-4 flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
+              <KeyRound className="h-4 w-4" />
+              <span>Password Recovery</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleModeChange("signin")}
+              className="text-xs text-primary hover:underline font-semibold"
+            >
+              Back to Sign In
+            </button>
+          </div>
+        )}
 
         {/* Email Sign In Form */}
         {mode === "signin" ? (
@@ -264,7 +310,16 @@ export function AuthModal() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-foreground">Password</label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-foreground">Password</label>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange("forgot")}
+                  className="text-[11px] text-primary hover:underline font-medium"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                 <input
@@ -290,7 +345,7 @@ export function AuthModal() {
               {busy ? "Signing in..." : "Sign In with Email"}
             </button>
           </form>
-        ) : (
+        ) : mode === "signup" ? (
           /* Create Account Form */
           <form onSubmit={handleSignUp} className="space-y-3">
             <div>
@@ -395,6 +450,71 @@ export function AuthModal() {
               {busy ? "Creating Account..." : "Create Customer Account"}
             </button>
           </form>
+        ) : (
+          /* Dedicated Forgot Password Form */
+          <div className="space-y-4">
+            {forgotSuccess ? (
+              <div className="space-y-4">
+                <div className="rounded-sm border border-primary/30 bg-primary/10 p-3.5 text-xs text-primary">
+                  <p className="font-semibold text-foreground">Password reset request sent</p>
+                  <p className="mt-1 leading-relaxed text-zinc-300">
+                    If an account exists with this email address, password reset instructions have been dispatched. Please check your inbox and spam folder.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setForgotSuccess(false);
+                  }}
+                  className="w-full rounded-sm bg-primary py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 transition-opacity"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Enter your registered work email address. We will verify your account in our database and send a secure single-use password reset link valid for 30 minutes.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-medium text-foreground">Registered Work Email *</label>
+                  <div className="relative mt-1">
+                    <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="Enter registered email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full rounded-sm border border-border bg-background pl-9 pr-3 py-2 text-xs text-foreground outline-none focus:border-primary placeholder:text-zinc-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("signin")}
+                    className="flex-1 rounded-sm border border-border py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotBusy}
+                    className="flex-1 rounded-sm bg-primary py-2 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-gold)] hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  >
+                    {forgotBusy ? "Sending…" : "Send Reset Link"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
 
         {/* Footer: Cancel / Continue Browsing */}
