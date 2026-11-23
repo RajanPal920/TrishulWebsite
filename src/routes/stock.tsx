@@ -45,14 +45,14 @@ function StockPage() {
     staleTime: 15 * 1000,
     refetchOnMount: "always",
     queryFn: async (): Promise<StockRow[]> => {
+      const isClient = typeof window !== "undefined";
+      if (!isClient) {
+        return SEED_STOCK_ITEMS;
+      }
+
       // Priority 1: Fetch via live REST endpoint /api/stock (works directly on Vercel and local)
       try {
-        const isClient = typeof window !== "undefined";
-        const envAppUrl = typeof process !== "undefined" && process.env ? process.env["APP_URL"] : undefined;
-        const envVercelUrl = typeof process !== "undefined" && process.env ? process.env["VERCEL_URL"] : undefined;
-        const host = envAppUrl || (envVercelUrl ? `https://${envVercelUrl}` : "http://localhost:8080");
-        const url = isClient ? "/api/stock" : `${host}/api/stock`;
-        const res = await fetch(url);
+        const res = await fetch("/api/stock");
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.stock) && json.stock.length > 0) {
@@ -71,16 +71,6 @@ function StockPage() {
         }
       } catch (apiErr) {
         console.warn("[Stock Api Client Notice]:", apiErr);
-      }
-
-      // Priority 3: Fallback to getStockItems server function
-      try {
-        const items = await getStockItems();
-        if (Array.isArray(items) && items.length > 0) {
-          return items as StockRow[];
-        }
-      } catch (fnErr) {
-        console.warn("[Stock ServerFn Notice]:", fnErr);
       }
 
       return SEED_STOCK_ITEMS;

@@ -35,18 +35,21 @@ export const getStockItems = createServerFn({ method: "GET" }).handler(
       // Non-fatal if direct DB import is unavailable in bundling
     }
 
-    // 2. Fetch from Express API endpoint if running with accessible local host
-    try {
-      const envUrl = typeof process !== "undefined" && process.env ? process.env["VITE_APP_URL"] : undefined;
-      const baseUrl = envUrl || "http://127.0.0.1:5001";
-      const res = await fetch(`${baseUrl}/api/stock`);
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.stock) && json.stock.length > 0) {
-          return json.stock as StockRow[];
+    // 2. Fetch from Express API endpoint if running locally with accessible local host
+    const isVercel = typeof process !== "undefined" && Boolean(process.env?.["VERCEL"]);
+    if (!isVercel) {
+      try {
+        const envUrl = typeof process !== "undefined" && process.env ? process.env["VITE_APP_URL"] : undefined;
+        const baseUrl = envUrl || "http://127.0.0.1:5001";
+        const res = await fetch(`${baseUrl}/api/stock`);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.stock) && json.stock.length > 0) {
+            return json.stock as StockRow[];
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     // 3. Fallback to production inventory seed
     return SEED_STOCK_ITEMS;

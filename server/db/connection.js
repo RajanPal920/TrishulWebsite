@@ -72,59 +72,80 @@ let connectionPromise = null;
 // ============================================================================
 // 1. PRIMARY ENGINE: MySQL Connection Pool with Cloud URL & SSL Support
 // ============================================================================
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const connectionUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_DATABASE_URL;
 
-const hasExplicitMySQL =
-  Boolean(connectionUrl) ||
-  Boolean(process.env.DB_HOST && process.env.DB_HOST !== '127.0.0.1' && process.env.DB_HOST !== 'localhost');
+const hasRemoteMySQL =
+  Boolean(connectionUrl && !connectionUrl.includes('127.0.0.1') && !connectionUrl.includes('localhost')) ||
+  Boolean(
+    process.env.DB_HOST &&
+      process.env.DB_HOST !== '127.0.0.1' &&
+      process.env.DB_HOST !== 'localhost' &&
+      !process.env.DB_HOST.startsWith('127.') &&
+      process.env.DB_HOST.includes('.')
+  );
 
-try {
-  let poolConfig;
-  if (connectionUrl) {
-    poolConfig = { uri: connectionUrl };
-  } else {
-    const host = process.env.DB_HOST || '127.0.0.1';
-    const port = parseInt(process.env.DB_PORT || '3306', 10);
-    const user = process.env.DB_USER || 'root';
-    const password = process.env.DB_PASSWORD || '';
-    const database = process.env.DB_NAME || 'trishul_db';
-    poolConfig = { host, port, user, password, database };
+// In Vercel serverless environment, local loopback (127.0.0.1) does not run MySQL.
+// Only attempt MySQL if an explicit remote host or database URL is configured.
+const shouldAttemptMySQL = isVercel ? hasRemoteMySQL : (process.env.DB_TYPE !== 'sqlite');
+
+if (shouldAttemptMySQL) {
+  try {
+    let poolConfig;
+    if (connectionUrl) {
+      poolConfig = { uri: connectionUrl };
+    } else {
+      const host = process.env.DB_HOST || '127.0.0.1';
+      const port = parseInt(process.env.DB_PORT || '3306', 10);
+      const user = process.env.DB_USER || 'root';
+      const password = process.env.DB_PASSWORD || '';
+      const database = process.env.DB_NAME || 'trishul_db';
+      poolConfig = { host, port, user, password, database };
+    }
+
+    poolConfig.waitForConnections = true;
+    poolConfig.connectionLimit = 10;
+    poolConfig.queueLimit = 0;
+    poolConfig.enableKeepAlive = true;
+    poolConfig.keepAliveInitialDelay = 0;
+    poolConfig.connectTimeout = 3000; // Strict 3s connection timeout
+
+    // For remote cloud MySQL (e.g. Aiven, PlanetScale, TiDB, Supabase, CleverCloud), enable SSL
+    const isLocal =
+      (!connectionUrl && (poolConfig.host === '127.0.0.1' || poolConfig.host === 'localhost')) ||
+      (connectionUrl && (connectionUrl.includes('127.0.0.1') || connectionUrl.includes('localhost')));
+
+    if (!isLocal) {
+      poolConfig.ssl = { rejectUnauthorized: false };
+    }
+
+    mysqlPool = mysql.createPool(poolConfig);
+
+    // Eager connection test with strict 3-second timeout
+    connectionPromise = Promise.race([
+      mysqlPool.getConnection(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('MySQL connection timeout (3s)')), 3000)),
+    ])
+      .then((conn) => {
+        activeEngine = 'mysql';
+        console.log(`[DB] Successfully connected to MySQL database engine.`);
+        conn.release();
+        return true;
+      })
+      .catch((err) => {
+        activeEngine = 'sqlite';
+        console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly initializing SQLite engine.`);
+        return false;
+      });
+  } catch (poolErr) {
+    activeEngine = 'sqlite';
+    console.warn('[DB Notice] MySQL pool initialization notice:', poolErr.message);
   }
-
-  poolConfig.waitForConnections = true;
-  poolConfig.connectionLimit = 15;
-  poolConfig.queueLimit = 0;
-  poolConfig.enableKeepAlive = true;
-  poolConfig.keepAliveInitialDelay = 0;
-
-  // For remote cloud MySQL (e.g. Aiven, PlanetScale, TiDB, Supabase, CleverCloud), enable SSL
-  const isLocal =
-    (!connectionUrl && (poolConfig.host === '127.0.0.1' || poolConfig.host === 'localhost')) ||
-    (connectionUrl && (connectionUrl.includes('127.0.0.1') || connectionUrl.includes('localhost')));
-
-  if (!isLocal) {
-    poolConfig.ssl = { rejectUnauthorized: false };
-  }
-
-  mysqlPool = mysql.createPool(poolConfig);
-
-  // Eager connection test
-  connectionPromise = mysqlPool
-    .getConnection()
-    .then((conn) => {
-      activeEngine = 'mysql';
-      console.log(`[DB] Successfully connected to MySQL database engine.`);
-      conn.release();
-      return true;
-    })
-    .catch((err) => {
-      activeEngine = 'sqlite';
-      console.warn(`[DB Notice] MySQL not reachable (${err.message}). Seamlessly initializing SQLite engine.`);
-      return false;
-    });
-} catch (poolErr) {
+} else {
   activeEngine = 'sqlite';
-  console.warn('[DB Notice] MySQL pool initialization notice:', poolErr.message);
+  if (isVercel) {
+    console.log('[DB] Running in Vercel Serverless environment. Using universal SQLite/WebAssembly engine.');
+  }
 }
 
 // ============================================================================
@@ -259,11 +280,9 @@ export async function all(sql, params = []) {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
       return rows;
     } catch (err) {
-      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
-        activeEngine = 'sqlite';
-        return all(sql, params);
-      }
-      throw err;
+      console.warn(`[DB Notice] MySQL query error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+      activeEngine = 'sqlite';
+      return all(sql, params);
     }
   }
 
@@ -310,11 +329,9 @@ export async function get(sql, params = []) {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
       return rows && rows.length > 0 ? rows[0] : null;
     } catch (err) {
-      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
-        activeEngine = 'sqlite';
-        return get(sql, params);
-      }
-      throw err;
+      console.warn(`[DB Notice] MySQL get error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+      activeEngine = 'sqlite';
+      return get(sql, params);
     }
   }
 
@@ -374,11 +391,9 @@ export async function run(sql, params = []) {
         affectedRows: result.affectedRows,
       };
     } catch (err) {
-      if (err.code === 'ECONNREFUSED' || err.code === 'EACCES') {
-        activeEngine = 'sqlite';
-        return run(sql, params);
-      }
-      throw err;
+      console.warn(`[DB Notice] MySQL run error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+      activeEngine = 'sqlite';
+      return run(sql, params);
     }
   }
 
@@ -418,8 +433,14 @@ export async function exec(sql) {
 
   // 1. MySQL
   if (activeEngine === 'mysql' && mysqlPool) {
-    await mysqlPool.query(sql);
-    return;
+    try {
+      await mysqlPool.query(sql);
+      return;
+    } catch (err) {
+      console.warn(`[DB Notice] MySQL exec error (${err.code || err.message}). Falling back to SQLite.`);
+      activeEngine = 'sqlite';
+      return exec(sql);
+    }
   }
 
   // 2. Native SQLite
@@ -453,7 +474,16 @@ export function getActiveEngine() {
 }
 
 export async function ensureConnected() {
-  if (connectionPromise) await connectionPromise;
+  if (connectionPromise) {
+    try {
+      await Promise.race([
+        connectionPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 2500)),
+      ]);
+    } catch {
+      activeEngine = 'sqlite';
+    }
+  }
   if (activeEngine !== 'mysql' && !sqliteDb) {
     await getSqlJsEngine();
   }
