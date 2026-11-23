@@ -1,4 +1,5 @@
-export function renderErrorPage(): string {
+export function renderErrorPage(errorDetail?: unknown): string {
+  const detailStr = errorDetail ? String(errorDetail).replace(/-->/g, '-- >') : '';
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -17,7 +18,10 @@ export function renderErrorPage(): string {
     </style>
   </head>
   <body>
-    <div class="card">
+    <!-- SSR_DEBUG_START -->
+    <!-- ${detailStr} -->
+    <!-- SSR_DEBUG_END -->
+    <div className="card" class="card">
       <h1>This page didn't load</h1>
       <p>Something went wrong on our end. You can try refreshing or head back home.</p>
       <div class="actions">

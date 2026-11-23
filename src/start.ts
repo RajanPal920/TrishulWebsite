@@ -1,6 +1,7 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { describeError } from "./lib/error-capture";
 import { legacyRedirectTarget } from "./lib/legacy-redirects";
 
 // Old-site URLs must 301 to their new equivalents so ranking pages keep their equity.
@@ -24,7 +25,8 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
       throw error;
     }
     console.error(error);
-    return new Response(renderErrorPage(), {
+    const desc = describeError(error);
+    return new Response(renderErrorPage(desc), {
       status: 500,
       headers: { "content-type": "text/html; charset=utf-8" },
     });
