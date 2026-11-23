@@ -34,8 +34,13 @@ function expressBackendPlugin(): Plugin {
   };
 }
 
+if (process.env["VERCEL"] || process.argv.includes("build")) {
+  process.env["NODE_ENV"] = "production";
+}
+
 export default defineConfig({
   vite: {
+    mode: "production",
     plugins: [expressBackendPlugin()],
     build: {
       rollupOptions: {

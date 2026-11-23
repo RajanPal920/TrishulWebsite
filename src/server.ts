@@ -1,3 +1,7 @@
+if (typeof process !== "undefined" && process.env) {
+  process.env["NODE_ENV"] = "production";
+}
+
 import "./lib/error-capture";
 
 import { consumeLastCapturedError, describeError } from "./lib/error-capture";
