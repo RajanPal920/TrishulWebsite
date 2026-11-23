@@ -516,7 +516,7 @@ export const SEED_USERS = [
   {
     id: 'admin-trishul-001',
     email: 'admin@trishulmetal.com',
-    password_hash: '$2b$10$s/2Y4qlLV586j93UqNjEMelbEdbQmIpYuOhh2kROFgu5slraMZeK.',
+    password_hash: '$2b$10$QCjkHp3m.hoZKz9UfNujbell8GBWbInAQf7.QNC8YVBKXgmLrtsge',
     full_name: 'Owner Administrator',
     company: 'Trishul Metals & Alloys',
     phone: '+91 22 2389 4500',

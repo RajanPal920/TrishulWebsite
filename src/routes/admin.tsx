@@ -217,23 +217,26 @@ function AdminConsolePage() {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loginBusy) return;
     setLoginError(null);
     setLoginBusy(true);
     try {
       const rawInput = adminUsername.trim().toLowerCase();
       const cleanUsername = rawInput || "admin";
-      const loggedUser = await login(cleanUsername, adminPassword);
-      setAdminPassword("");
+      const cleanPassword = adminPassword.trim();
+      const loggedUser = await login(cleanUsername, cleanPassword || adminPassword);
       if (loggedUser.role !== "admin") {
         setLoginError("This account does not have Owner Administrator privileges.");
+      } else {
+        setAdminPassword("");
       }
     } catch (err: any) {
-      setAdminPassword("");
+      // Retain entered password so user can click Show Password eye icon on mobile and fix any typo
       const status = err?.status;
       const code = err?.data?.code;
       const msg = err?.data?.error || err?.message || "";
       if (status === 401 || code === "INVALID_CREDENTIALS") {
-        setLoginError("Incorrect administrator username or password. Please check your credentials and try again.");
+        setLoginError("Incorrect administrator username or password. Please verify your credentials and try again.");
       } else if (status === 404 || code === "ACCOUNT_NOT_FOUND") {
         setLoginError("Administrator account not found. Please verify your username.");
       } else if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
