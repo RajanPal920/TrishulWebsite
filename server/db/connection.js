@@ -12,23 +12,55 @@ const require = createRequire(import.meta.url);
 const CANDIDATE_DB_PATHS = [
   process.env.DATABASE_PATH ? path.resolve(process.env.DATABASE_PATH) : null,
   '/tmp/trishul.db',
-  path.resolve(__dirname, '../data/trishul.db'),
   path.resolve(process.cwd(), 'server/data/trishul.db'),
+  path.resolve(__dirname, '../data/trishul.db'),
   path.resolve(__dirname, '../../server/data/trishul.db'),
+  path.resolve(__dirname, '../../../server/data/trishul.db'),
+  '/var/task/server/data/trishul.db',
+  '/var/task/data/trishul.db',
+  path.resolve(process.cwd(), 'data/trishul.db'),
 ].filter(Boolean);
 
-function findExistingDbFile() {
+// Candidate wasm binary paths for sql.js on Vercel lambda and local Node
+const CANDIDATE_WASM_PATHS = [
+  path.resolve(process.cwd(), 'server/data/sql-wasm.wasm'),
+  path.resolve(__dirname, '../data/sql-wasm.wasm'),
+  path.resolve(__dirname, '../../server/data/sql-wasm.wasm'),
+  '/var/task/server/data/sql-wasm.wasm',
+  path.resolve(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm'),
+  path.resolve(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm'),
+  path.resolve(__dirname, '../node_modules/sql.js/dist/sql-wasm.wasm'),
+  '/var/task/node_modules/sql.js/dist/sql-wasm.wasm',
+].filter(Boolean);
+
+function prepareWorkingDbFile() {
+  // 1. If /tmp/trishul.db already exists with data, prioritize it (contains active session mutations)
+  try {
+    if (fs.existsSync('/tmp/trishul.db') && fs.statSync('/tmp/trishul.db').size > 0) {
+      return '/tmp/trishul.db';
+    }
+  } catch {}
+
+  // 2. Locate bundled production database file
   for (const p of CANDIDATE_DB_PATHS) {
+    if (p === '/tmp/trishul.db') continue;
     try {
       if (fs.existsSync(p) && fs.statSync(p).size > 0) {
-        return p;
+        // In serverless / read-only environment, prime /tmp/trishul.db for writing
+        try {
+          fs.copyFileSync(p, '/tmp/trishul.db');
+          console.log(`[DB] Successfully primed writable database at /tmp/trishul.db from ${p}`);
+          return '/tmp/trishul.db';
+        } catch {
+          return p;
+        }
       }
     } catch {}
   }
   return path.resolve(__dirname, '../data/trishul.db');
 }
 
-const DB_PATH = findExistingDbFile();
+const DB_PATH = prepareWorkingDbFile();
 
 // Engine state: 'mysql' | 'sqlite' | 'sqljs'
 let activeEngine = 'sqlite';
@@ -118,6 +150,17 @@ try {
 // ============================================================================
 let sqlJsInitPromise = null;
 
+function findWasmBinary() {
+  for (const p of CANDIDATE_WASM_PATHS) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).size > 0) {
+        return fs.readFileSync(p);
+      }
+    } catch {}
+  }
+  return null;
+}
+
 async function getSqlJsEngine() {
   if (sqlJsDb) return sqlJsDb;
   if (sqlJsInitPromise) return sqlJsInitPromise;
@@ -125,27 +168,27 @@ async function getSqlJsEngine() {
   sqlJsInitPromise = (async () => {
     try {
       const initSqlJs = require('sql.js');
-      const SQL = await initSqlJs({
-        locateFile: (file) => {
-          const candidatePaths = [
-            path.resolve(process.cwd(), 'node_modules/sql.js/dist', file),
-            path.resolve(__dirname, '../../node_modules/sql.js/dist', file),
-            path.resolve(__dirname, '../node_modules/sql.js/dist', file),
-          ];
-          for (const p of candidatePaths) {
-            try {
-              if (fs.existsSync(p)) return p;
-            } catch {}
-          }
-          return file;
-        },
-      });
+      const wasmBinary = findWasmBinary();
+      const sqlConfig = wasmBinary
+        ? { wasmBinary }
+        : {
+            locateFile: (file) => {
+              for (const p of CANDIDATE_WASM_PATHS) {
+                try {
+                  if (fs.existsSync(p)) return p;
+                } catch {}
+              }
+              return file;
+            },
+          };
 
-      // Find best file to load initial bytes from
-      const dbFileToLoad = findExistingDbFile();
+      const SQL = await initSqlJs(sqlConfig);
+
+      // Find best file to load initial bytes from (prefers /tmp/trishul.db or copied bundled db)
+      const dbFileToLoad = prepareWorkingDbFile();
       let fileBuffer = null;
       try {
-        if (fs.existsSync(dbFileToLoad)) {
+        if (fs.existsSync(dbFileToLoad) && fs.statSync(dbFileToLoad).size > 0) {
           fileBuffer = fs.readFileSync(dbFileToLoad);
         }
       } catch (readErr) {
@@ -153,7 +196,7 @@ async function getSqlJsEngine() {
       }
 
       sqlJsDb = fileBuffer ? new SQL.Database(fileBuffer) : new SQL.Database();
-      console.log(`[DB] Universal sql.js (WebAssembly) initialized successfully from ${dbFileToLoad || 'memory'}.`);
+      console.log(`[DB] Universal sql.js (WebAssembly) initialized successfully from ${dbFileToLoad || 'memory'} (${fileBuffer ? fileBuffer.length : 0} bytes).`);
       return sqlJsDb;
     } catch (wasmErr) {
       console.error('[DB] Failed to initialize sql.js:', wasmErr.message);
@@ -165,16 +208,23 @@ async function getSqlJsEngine() {
 }
 
 // Persist sql.js mutations to disk (/tmp/trishul.db and original DB_PATH if writable)
-function persistSqlJs(dbInstance) {
-  if (!dbInstance) return;
+export function persistSqlJs(dbInstance) {
+  const instance = dbInstance || sqlJsDb;
+  if (!instance) return;
   try {
-    const data = dbInstance.export();
+    const data = instance.export();
     const buf = Buffer.from(data);
     try {
       fs.writeFileSync('/tmp/trishul.db', buf);
     } catch {}
     try {
-      if (DB_PATH && !DB_PATH.startsWith('/tmp')) {
+      const localPath = path.resolve(process.cwd(), 'server/data/trishul.db');
+      if (fs.existsSync(path.dirname(localPath))) {
+        fs.writeFileSync(localPath, buf);
+      }
+    } catch {}
+    try {
+      if (DB_PATH && !DB_PATH.startsWith('/tmp') && fs.existsSync(path.dirname(DB_PATH))) {
         fs.writeFileSync(DB_PATH, buf);
       }
     } catch {}
@@ -350,7 +400,9 @@ export async function run(sql, params = []) {
       persistSqlJs(wasmDb);
       return { lastID: 1, changes: 1 };
     } catch (err) {
-      console.error('[sql.js run error]:', err.message);
+      if (!err.message?.includes('duplicate column name')) {
+        console.warn('[sql.js run notice]:', err.message);
+      }
       throw err;
     }
   }

@@ -3,7 +3,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'node:url';
-import { db, exec, get, run, all, getActiveEngine, ensureConnected, sqliteDb } from './connection.js';
+import { db, exec, get, run, all, getActiveEngine, ensureConnected, sqliteDb, persistSqlJs } from './connection.js';
+import {
+  SQL_SCHEMA_SQLITE,
+  SQL_SCHEMA_MYSQL,
+  SEED_USERS,
+  SEED_RFQS,
+  SEED_ACTIVITY_HISTORY,
+} from './seedData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,7 +74,16 @@ export async function initDatabase() {
 
   console.log(`[DB] Applying database schema for engine '${engine}' using ${schemaFile}...`);
   try {
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    let schemaSql = '';
+    try {
+      if (fs.existsSync(schemaPath)) {
+        schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      }
+    } catch {}
+    if (!schemaSql || schemaSql.length < 50) {
+      schemaSql = engine === 'mysql' ? SQL_SCHEMA_MYSQL : SQL_SCHEMA_SQLITE;
+    }
+
     // On MySQL, split statements by semicolon if needed or run directly
     if (engine === 'mysql') {
       const statements = schemaSql
@@ -172,19 +188,115 @@ export async function initDatabase() {
     // safe to ignore table exists
   }
 
-  // Ensure default Owner Administrator exists
-  const adminEmail = 'admin@trishulmetal.com';
-  const existingAdmin = await get('SELECT id FROM users WHERE email = ?', [adminEmail]);
-  if (!existingAdmin) {
-    const adminId = 'admin-trishul-001';
-    const adminHash = await bcrypt.hash('Admin@Trishul2026!', 10);
-    const now = new Date().toISOString();
-    await run(
-      `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'admin', 'active', ?, ?)`,
-      [adminId, adminEmail, adminHash, 'Owner Administrator', 'Trishul Metals & Alloys', '+91 22 2389 4500', now, now]
-    );
-    console.log('[DB] Seeded default Owner Administrator: admin@trishulmetal.com');
+  // 1. Synchronize All Registered Users (including Admin and Customer Accounts)
+  try {
+    const currentUsers = await all('SELECT id, email FROM users');
+    const currentEmailMap = new Map((currentUsers || []).map((u) => [(u.email || '').toLowerCase(), u.id]));
+
+    for (const su of SEED_USERS) {
+      const cleanEmail = (su.email || '').toLowerCase();
+      if (cleanEmail && !currentEmailMap.has(cleanEmail)) {
+        console.log(`[DB Sync] Seeding essential user into ${engine}: ${cleanEmail} (${su.full_name})`);
+        await run(
+          `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, google_id, avatar_url, login_method, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            su.id || crypto.randomUUID(),
+            cleanEmail,
+            su.password_hash || null,
+            su.full_name || 'Customer',
+            su.company || null,
+            su.phone || null,
+            su.role || 'customer',
+            su.status || 'active',
+            su.google_id || null,
+            su.avatar_url || null,
+            su.login_method || 'password',
+            su.created_at || new Date().toISOString(),
+            su.updated_at || new Date().toISOString(),
+          ]
+        ).catch((e) => console.warn('[DB Sync User Notice]:', e.message));
+        currentEmailMap.set(cleanEmail, su.id);
+      }
+    }
+  } catch (uErr) {
+    console.warn('[DB Sync Users Error]:', uErr.message);
+  }
+
+  // 2. Synchronize All Production Customer RFQs / Inquiries
+  try {
+    const currentRfqs = await all('SELECT id, reference FROM rfq_requests');
+    const currentRefMap = new Map((currentRfqs || []).map((r) => [(r.reference || '').toUpperCase(), r.id]));
+
+    for (const sr of SEED_RFQS) {
+      const refUpper = (sr.reference || '').toUpperCase();
+      if (refUpper && !currentRefMap.has(refUpper)) {
+        console.log(`[DB Sync] Seeding RFQ inquiry into ${engine}: ${sr.reference} (${sr.contact_name})`);
+        await run(
+          `INSERT INTO rfq_requests (id, user_id, reference, confirmation_token, company, contact_name, email, phone, country, incoterm, delivery_port, target_lead_time, project_name, message, certification, testing, items, attachments, status, admin_response, admin_notes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sr.id || crypto.randomUUID(),
+            sr.user_id || null,
+            sr.reference,
+            sr.confirmation_token || crypto.randomUUID(),
+            sr.company || '',
+            sr.contact_name || '',
+            sr.email || '',
+            sr.phone || null,
+            sr.country || null,
+            sr.incoterm || 'FOB',
+            sr.delivery_port || null,
+            sr.target_lead_time || null,
+            sr.project_name || null,
+            sr.message || null,
+            sr.certification || 'EN 10204 3.1',
+            typeof sr.testing === 'string' ? sr.testing : JSON.stringify(sr.testing || []),
+            typeof sr.items === 'string' ? sr.items : JSON.stringify(sr.items || []),
+            typeof sr.attachments === 'string' ? sr.attachments : JSON.stringify(sr.attachments || []),
+            sr.status || 'Submitted',
+            sr.admin_response || null,
+            sr.admin_notes || null,
+            sr.created_at || new Date().toISOString(),
+          ]
+        ).catch((e) => console.warn('[DB Sync RFQ Notice]:', e.message));
+        currentRefMap.set(refUpper, sr.id);
+      }
+    }
+  } catch (rfqErr) {
+    console.warn('[DB Sync RFQs Error]:', rfqErr.message);
+  }
+
+  // 3. Synchronize Activity History Records
+  try {
+    const currentActs = await all('SELECT id FROM request_activity_history');
+    const currentActSet = new Set((currentActs || []).map((a) => a.id));
+
+    for (const sa of SEED_ACTIVITY_HISTORY) {
+      if (sa.id && !currentActSet.has(sa.id)) {
+        await run(
+          `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sa.id,
+            sa.request_id,
+            sa.actor_type,
+            sa.actor_id || null,
+            sa.actor_name || null,
+            sa.action,
+            sa.old_status || null,
+            sa.new_status || null,
+            sa.message || null,
+            sa.is_internal ? 1 : 0,
+            sa.email_sent ? 1 : 0,
+            sa.created_at || new Date().toISOString(),
+          ]
+        ).catch((e) => console.warn('[DB Sync History Notice]:', e.message));
+        currentActSet.add(sa.id);
+      }
+    }
+  } catch (histErr) {
+    console.warn('[DB Sync History Error]:', histErr.message);
   }
 
   // Ensure all existing customer accounts have a valid password hash for seamless password login
@@ -192,77 +304,6 @@ export async function initDatabase() {
   await run("UPDATE users SET password_hash = ? WHERE password_hash IS NULL AND role = 'customer'", [defaultCustomerHash]).catch(() => {});
   if (sqliteDb) {
     sqliteDb.run("UPDATE users SET password_hash = ? WHERE password_hash IS NULL AND role = 'customer'", [defaultCustomerHash], () => {});
-  }
-
-  // Bidirectional Synchronization: Sync SQLite users and RFQs into MySQL and vice versa
-  if (sqliteDb) {
-    try {
-      const sqliteUsers = await new Promise((resolve) => {
-        sqliteDb.all('SELECT * FROM users', (err, rows) => resolve(rows || []));
-      });
-
-      const currentUsers = await all('SELECT id, email FROM users');
-      const currentEmailMap = new Map((currentUsers || []).map((u) => [(u.email || '').toLowerCase(), u.id]));
-
-      for (const su of sqliteUsers) {
-        const cleanEmail = (su.email || '').toLowerCase();
-        if (cleanEmail && !currentEmailMap.has(cleanEmail)) {
-          console.log(`[DB Sync] Migrating user from SQLite to active engine: ${cleanEmail} (${su.full_name})`);
-          await run(
-            `INSERT INTO users (id, email, password_hash, full_name, company, phone, role, status, google_id, avatar_url, login_method, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              su.id || crypto.randomUUID(),
-              cleanEmail,
-              su.password_hash || null,
-              su.full_name || 'Customer',
-              su.company || null,
-              su.phone || null,
-              su.role || 'customer',
-              su.status || 'active',
-              su.google_id || null,
-              su.avatar_url || null,
-              su.login_method || 'password',
-              su.created_at || new Date().toISOString(),
-              su.updated_at || new Date().toISOString(),
-            ]
-          ).catch((e) => console.warn('[DB Sync Notice]:', e.message));
-        }
-      }
-
-      // If active engine is MySQL, ensure SQLite has any users from MySQL
-      if (engine === 'mysql') {
-        const mysqlUsers = await all('SELECT * FROM users');
-        const sqliteEmails = new Set(sqliteUsers.map((u) => (u.email || '').toLowerCase()));
-        for (const mu of mysqlUsers) {
-          const cleanEmail = (mu.email || '').toLowerCase();
-          if (cleanEmail && !sqliteEmails.has(cleanEmail)) {
-            sqliteDb.run(
-              `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, company, phone, role, status, google_id, avatar_url, login_method, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                mu.id,
-                cleanEmail,
-                mu.password_hash || null,
-                mu.full_name,
-                mu.company || null,
-                mu.phone || null,
-                mu.role || 'customer',
-                mu.status || 'active',
-                mu.google_id || null,
-                mu.avatar_url || null,
-                mu.login_method || 'password',
-                mu.created_at ? new Date(mu.created_at).toISOString() : new Date().toISOString(),
-                mu.updated_at ? new Date(mu.updated_at).toISOString() : new Date().toISOString(),
-              ],
-              () => {}
-            );
-          }
-        }
-      }
-    } catch (syncErr) {
-      console.warn('[DB Sync Warning]:', syncErr.message);
-    }
   }
 
   // Check if stock_items is populated
@@ -279,6 +320,9 @@ export async function initDatabase() {
     }
     console.log(`[DB] Successfully seeded ${STOCK_ITEMS_SEED.length} stock items.`);
   }
+
+  // Persist any sql.js memory changes to /tmp/trishul.db
+  persistSqlJs();
 
   return true;
 }
