@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { get, run, all, sqliteDb } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
-import { sendPasswordResetEmail, getPublicAppUrl } from '../services/email.js';
+import { sendPasswordResetEmail, getPublicAppUrl, maskEmail } from '../services/email.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
@@ -59,11 +59,27 @@ async function createSession(userId, res, req, userRecord = null) {
         `INSERT OR IGNORE INTO user_sessions (id, user_id, token, expires_at)
          VALUES (?, ?, ?, ?)`,
         [sessionId, userId, token, expiresAt],
-        () => {}
+        () => { }
       );
     }
   } catch (err) {
-    console.warn('[Session audit write notice]:', err.message);
+    if (err.message && (err.message.includes('Data too long') || err.message.includes('ER_DATA_TOO_LONG'))) {
+      try {
+        await run('ALTER TABLE user_sessions DROP INDEX token').catch(() => {});
+        await run('ALTER TABLE user_sessions DROP INDEX idx_sessions_token').catch(() => {});
+        await run('ALTER TABLE user_sessions MODIFY COLUMN token TEXT NOT NULL').catch(() => {});
+        await run('ALTER TABLE user_sessions ADD INDEX idx_sessions_token (token(191))').catch(() => {});
+        await run(
+          `INSERT INTO user_sessions (id, user_id, token, expires_at)
+           VALUES (?, ?, ?, ?)`,
+          [sessionId, userId, token, expiresAt]
+        );
+      } catch (retryErr) {
+        console.warn('[Session audit write notice]:', retryErr.message);
+      }
+    } else {
+      console.warn('[Session audit write notice]:', err.message);
+    }
   }
 
   res.cookie('trishul_session', token, getCookieOptions(req));
@@ -140,7 +156,7 @@ router.post('/register', async (req, res) => {
                  updated_at = ?
              WHERE id = ?`,
             [passwordHash, name, cleanCompany || null, cleanPhone || null, now, existing.id],
-            () => {}
+            () => { }
           );
         }
 
@@ -150,7 +166,7 @@ router.post('/register', async (req, res) => {
         await run(
           'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
           [existing.id, cleanEmail]
-        ).catch(() => {});
+        ).catch(() => { });
 
         console.log(`[Register] Activated password login for existing account: ${cleanEmail}`);
 
@@ -196,7 +212,7 @@ router.post('/register', async (req, res) => {
         `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, company, phone, role, status, login_method, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, 'customer', 'active', 'password', ?, ?)`,
         [userId, cleanEmail, passwordHash, name, cleanCompany || null, cleanPhone || null, now, now],
-        () => {}
+        () => { }
       );
     }
 
@@ -206,7 +222,7 @@ router.post('/register', async (req, res) => {
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [userId, cleanEmail]
-    ).catch(() => {});
+    ).catch(() => { });
 
     console.log(`[Register] Created new customer account: ${cleanEmail} (${name})`);
 
@@ -300,7 +316,7 @@ router.post('/login', async (req, res) => {
             fallbackUser.created_at || new Date().toISOString(),
             new Date().toISOString(),
           ]
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -383,9 +399,9 @@ router.post('/login', async (req, res) => {
       const isCurrentHashMatching = user.password_hash ? await bcrypt.compare('Admin@Trishul2026!', user.password_hash) : false;
       if (!isCurrentHashMatching) {
         const freshHash = await bcrypt.hash('Admin@Trishul2026!', 10);
-        await run('UPDATE users SET password_hash = ? WHERE id = ?', [freshHash, user.id]).catch(() => {});
+        await run('UPDATE users SET password_hash = ? WHERE id = ?', [freshHash, user.id]).catch(() => { });
         if (sqliteDb) {
-          sqliteDb.run('UPDATE users SET password_hash = ? WHERE id = ?', [freshHash, user.id], () => {});
+          sqliteDb.run('UPDATE users SET password_hash = ? WHERE id = ?', [freshHash, user.id], () => { });
         }
       }
     }
@@ -401,7 +417,7 @@ router.post('/login', async (req, res) => {
       `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
        VALUES (?, ?, 'password', ?, ?, 'success', ?)`,
       [activityId, user.id, ip, userAgent, now]
-    ).catch(() => {});
+    ).catch(() => { });
 
     const token = await createSession(user.id, res, req, user);
 
@@ -409,7 +425,7 @@ router.post('/login', async (req, res) => {
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [user.id, cleanEmail]
-    ).catch(() => {});
+    ).catch(() => { });
 
     console.log(`[Login] Successful sign-in for: ${cleanEmail} (${user.role})`);
 
@@ -633,7 +649,7 @@ router.get('/google/callback', async (req, res) => {
           name = info.name;
           picture = info.picture;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!email) {
@@ -682,7 +698,7 @@ router.get('/google/callback', async (req, res) => {
       `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
        VALUES (?, ?, 'google', ?, ?, 'success', ?)`,
       [actId, userId, clientIp, clientAgent, now]
-    ).catch(() => {});
+    ).catch(() => { });
 
     await createSession(userId, res, req);
 
@@ -690,7 +706,7 @@ router.get('/google/callback', async (req, res) => {
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [userId, cleanEmail]
-    ).catch(() => {});
+    ).catch(() => { });
 
     return res.redirect('/portal');
   } catch (err) {
@@ -837,7 +853,7 @@ router.post('/google', async (req, res) => {
       `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
        VALUES (?, ?, 'google', ?, ?, 'success', ?)`,
       [actId, userId, clientIp, clientAgent, now]
-    ).catch(() => {});
+    ).catch(() => { });
 
     const token = await createSession(userId, res, req);
 
@@ -845,7 +861,7 @@ router.post('/google', async (req, res) => {
     await run(
       'UPDATE rfq_requests SET user_id = ? WHERE LOWER(email) = ? AND user_id IS NULL',
       [userId, cleanEmail]
-    ).catch(() => {});
+    ).catch(() => { });
 
     const user = await get(
       `SELECT id, email, full_name, company, phone, role, avatar_url, last_login_at, created_at
@@ -892,20 +908,20 @@ router.get('/me', (req, res) => {
 router.post('/logout', async (req, res) => {
   try {
     if (req.sessionId) {
-      await run('DELETE FROM user_sessions WHERE id = ?', [req.sessionId]).catch(() => {});
+      await run('DELETE FROM user_sessions WHERE id = ?', [req.sessionId]).catch(() => { });
     } else if (req.user) {
-      await run('DELETE FROM user_sessions WHERE user_id = ?', [req.user.id]).catch(() => {});
+      await run('DELETE FROM user_sessions WHERE user_id = ?', [req.user.id]).catch(() => { });
     }
 
     const bearerToken = req.headers.authorization?.startsWith('Bearer ')
       ? req.headers.authorization.split(' ')[1]?.trim()
       : null;
     if (bearerToken) {
-      await run('DELETE FROM user_sessions WHERE token = ?', [bearerToken]).catch(() => {});
+      await run('DELETE FROM user_sessions WHERE token = ?', [bearerToken]).catch(() => { });
     }
 
     if (req.cookies && req.cookies.trishul_session) {
-      await run('DELETE FROM user_sessions WHERE token = ?', [req.cookies.trishul_session]).catch(() => {});
+      await run('DELETE FROM user_sessions WHERE token = ?', [req.cookies.trishul_session]).catch(() => { });
     }
   } catch (err) {
     console.error('[Logout cleanup error]:', err);
@@ -975,7 +991,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
       sqliteDb.run(
         'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?',
         [newHash, now, req.user.id],
-        () => {}
+        () => { }
       );
     }
 
@@ -987,7 +1003,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
       `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
        VALUES (?, ?, 'password_change', ?, ?, 'success', ?)`,
       [activityId, req.user.id, ip, userAgent, now]
-    ).catch(() => {});
+    ).catch(() => { });
 
     return res.json({ success: true, message: 'Your password has been changed successfully.' });
   } catch (err) {
@@ -1033,7 +1049,7 @@ async function handleForgotPasswordRequest(req, res) {
       await run(
         'UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL',
         [nowIso, user.id]
-      ).catch(() => {});
+      ).catch(() => { });
 
       // Generate cryptographically secure random token (32 bytes = 64 hex chars)
       const rawToken = crypto.randomBytes(32).toString('hex');
@@ -1054,7 +1070,7 @@ async function handleForgotPasswordRequest(req, res) {
           `INSERT OR IGNORE INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
            VALUES (?, ?, ?, ?, ?)`,
           [tokenId, user.id, tokenHash, expiresAt, nowIso],
-          () => {}
+          () => { }
         );
       }
 
@@ -1074,13 +1090,13 @@ async function handleForgotPasswordRequest(req, res) {
 
       if (!emailResult?.success) {
         console.warn(
-          `[Auth Notice] Token generated for ${user.email}, but email was not sent: ${emailResult?.error || 'Provider not configured'}`
+          `[Auth Notice] Token generated for ${maskEmail(user.email)}, but email was not sent: ${emailResult?.error || 'Provider not configured'}`
         );
+      } else {
+        console.log(`[Auth] Issued secure password reset token for: ${maskEmail(user.email)} (Email dispatch: ACCEPTED via ${emailResult.mode})`);
       }
-
-      console.log(`[Auth] Issued secure password reset token for: ${user.email} (Email dispatch: ${emailResult?.success ? 'Delivered' : 'Failed/Unconfigured'})`);
     } else {
-      console.log(`[Auth] Password reset requested for non-existent email: ${cleanEmail} (suppressed response)`);
+      console.log(`[Auth] Password reset requested for non-existent email: ${maskEmail(cleanEmail)} (suppressed response)`);
     }
 
     return res.json(genericResponse);
@@ -1202,20 +1218,20 @@ router.post('/reset-password', async (req, res) => {
          SET password_hash = ?, login_method = 'password', status = 'active', updated_at = ?
          WHERE id = ?`,
         [newHash, now, tokenRecord.user_id],
-        () => {}
+        () => { }
       );
     }
 
     // 2. Mark this token as used immediately (single-use)
     await run('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?', [now, tokenRecord.id]);
     if (sqliteDb) {
-      sqliteDb.run('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?', [now, tokenRecord.id], () => {});
+      sqliteDb.run('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?', [now, tokenRecord.id], () => { });
     }
 
     // 3. Invalidate all existing sessions for security
     await run('DELETE FROM user_sessions WHERE user_id = ?', [tokenRecord.user_id]);
     if (sqliteDb) {
-      sqliteDb.run('DELETE FROM user_sessions WHERE user_id = ?', [tokenRecord.user_id], () => {});
+      sqliteDb.run('DELETE FROM user_sessions WHERE user_id = ?', [tokenRecord.user_id], () => { });
     }
 
     // 4. Log password reset event
@@ -1226,7 +1242,7 @@ router.post('/reset-password', async (req, res) => {
       `INSERT INTO user_login_activity (id, user_id, login_method, ip_address, user_agent, status, created_at)
        VALUES (?, ?, 'password', ?, ?, 'password_reset_success', ?)`,
       [activityId, tokenRecord.user_id, ip, userAgent, now]
-    ).catch(() => {});
+    ).catch(() => { });
 
     console.log(`[Auth] Password reset successfully completed for user: ${tokenRecord.email}`);
 

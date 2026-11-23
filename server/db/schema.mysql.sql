@@ -25,14 +25,14 @@ CREATE TABLE IF NOT EXISTS users (
   INDEX idx_users_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. User Sessions Table (Persistent Server-Side Session Tokens)
+-- 2. User Sessions Table (Persistent Server-Side Session Tokens & Signed JWTs)
 CREATE TABLE IF NOT EXISTS user_sessions (
   id VARCHAR(64) PRIMARY KEY,
   user_id VARCHAR(64) NOT NULL,
-  token VARCHAR(255) UNIQUE NOT NULL,
+  token TEXT NOT NULL,
   expires_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_sessions_token (token),
+  INDEX idx_sessions_token (token(191)),
   INDEX idx_sessions_user_id (user_id),
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

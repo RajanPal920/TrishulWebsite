@@ -1205,4 +1205,3 @@ function CustomerPortalPage() {
     </div>
   );
 }
-export default CustomerPortalPage;

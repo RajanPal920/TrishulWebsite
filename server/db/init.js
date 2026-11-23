@@ -124,6 +124,23 @@ export async function initDatabase() {
     }
   }
 
+  // Safe migration for user_sessions token column length to support full signed JWTs without data truncation
+  if (engine === 'mysql') {
+    try {
+      const sessionCols = await all("SHOW COLUMNS FROM user_sessions LIKE 'token'");
+      if (sessionCols && sessionCols.length > 0 && sessionCols[0].Type?.toLowerCase().includes('varchar')) {
+        console.log('[DB Migration] Migrating user_sessions.token from VARCHAR to TEXT for JWT compatibility...');
+        try { await run('ALTER TABLE user_sessions DROP INDEX token'); } catch {}
+        try { await run('ALTER TABLE user_sessions DROP INDEX idx_sessions_token'); } catch {}
+        await run('ALTER TABLE user_sessions MODIFY COLUMN token TEXT NOT NULL');
+        try { await run('ALTER TABLE user_sessions ADD INDEX idx_sessions_token (token(191))'); } catch {}
+        console.log('[DB Migration] user_sessions.token successfully migrated to TEXT with prefix index.');
+      }
+    } catch (migErr) {
+      // Non-fatal if index or table already updated
+    }
+  }
+
   // Ensure sqlite fallback also has status column if sqliteDb is open
   if (sqliteDb) {
     sqliteDb.run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active';", () => {});

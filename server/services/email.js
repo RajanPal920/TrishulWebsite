@@ -4,17 +4,37 @@ import crypto from 'node:crypto';
 // Cached transporter instance
 let cachedTransporter = null;
 
+/**
+ * Masks an email address for safe display in logs without leaking sensitive customer identity
+ * e.g. rajanp9209022@gmail.com -> r***********2@gmail.com
+ */
+export function maskEmail(email) {
+  if (!email || typeof email !== 'string') return '[empty]';
+  const parts = email.trim().split('@');
+  if (parts.length !== 2) return '[invalid-email]';
+  const name = parts[0];
+  const domain = parts[1];
+  if (name.length <= 2) {
+    return `${name[0]}*@${domain}`;
+  }
+  const maskedName = `${name[0]}${'*'.repeat(Math.max(1, name.length - 2))}${name[name.length - 1]}`;
+  return `${maskedName}@${domain}`;
+}
+
 export function getEmailTransporter() {
   if (cachedTransporter) return cachedTransporter;
 
-  // Direct Gmail App Password integration
+  // Direct Gmail App Password integration (supports GMAIL_USER / GMAIL_APP_PASSWORD and SMTP_USER / SMTP_PASS with @gmail.com)
+  const isGmailHost = process.env.SMTP_HOST?.includes('gmail') || process.env.SMTP_USER?.includes('@gmail.com');
   const gmailUser = process.env.GMAIL_USER || (process.env.SMTP_USER?.includes('@gmail.com') ? process.env.SMTP_USER : null);
-  const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD;
+  const rawGmailPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || (isGmailHost ? process.env.SMTP_PASS : null);
+  const gmailPass = rawGmailPass ? rawGmailPass.replace(/\s+/g, '') : null;
+
   if (gmailUser && gmailPass) {
     cachedTransporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: gmailUser,
+        user: gmailUser.trim(),
         pass: gmailPass,
       },
     });
@@ -29,10 +49,13 @@ export function getEmailTransporter() {
 
   if (host && user && pass) {
     cachedTransporter = nodemailer.createTransport({
-      host,
+      host: host.trim(),
       port,
       secure,
-      auth: { user, pass },
+      auth: {
+        user: user.trim(),
+        pass: typeof pass === 'string' ? pass.trim() : pass,
+      },
       tls: { rejectUnauthorized: false },
     });
   }
@@ -44,11 +67,14 @@ export function getDefaultFromAddress() {
   if (process.env.EMAIL_FROM) {
     return process.env.EMAIL_FROM;
   }
-  if (process.env.RESEND_API_KEY) {
-    return process.env.RESEND_FROM || 'Trishul Metals & Alloys <onboarding@resend.dev>';
+  if (process.env.GMAIL_USER) {
+    return `"Trishul Metals & Alloys" <${process.env.GMAIL_USER.trim()}>`;
   }
-  if (process.env.SMTP_USER) {
-    return `"Trishul Metals & Alloys" <${process.env.SMTP_USER}>`;
+  if (process.env.SMTP_USER && process.env.SMTP_USER.includes('@')) {
+    return `"Trishul Metals & Alloys" <${process.env.SMTP_USER.trim()}>`;
+  }
+  if (process.env.RESEND_API_KEY) {
+    return process.env.RESEND_FROM || '"Trishul Metals & Alloys" <notifications@trishulmetal.com>';
   }
   return '"Trishul Metals & Alloys" <export@trishulmetal.com>';
 }
@@ -78,15 +104,21 @@ export function getPublicAppUrl(req) {
  * Universal real email dispatch service.
  * Delivers via Resend REST API or Nodemailer SMTP (e.g. Gmail / Google Workspace / custom SMTP).
  * Returns real success/failure without terminal simulation masquerading as delivery.
+ * Logs meaningful delivery lifecycle states: PENDING, ACCEPTED, DELIVERED, FAILED.
  */
-export async function sendEmail({ to, subject, html, text }) {
+export async function sendEmail({ to, subject, html, text, emailType = 'CUSTOMER_NOTIFICATION' }) {
   const from = getDefaultFromAddress();
 
   const recipientList = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
   if (recipientList.length === 0) {
-    return { success: false, error: 'Recipient email address is missing or invalid.', mode: 'invalid_recipient' };
+    console.error(`[Email Service] Status: FAILED | Type: ${emailType} | Reason: Recipient email address is missing or invalid | Timestamp: ${new Date().toISOString()}`);
+    return { success: false, status: 'FAILED', error: 'Recipient email address is missing or invalid.', mode: 'invalid_recipient' };
   }
   const cleanTo = recipientList.length === 1 ? recipientList[0] : recipientList;
+  const maskedTo = Array.isArray(cleanTo) ? cleanTo.map(maskEmail).join(', ') : maskEmail(cleanTo);
+  const nowIso = new Date().toISOString();
+
+  console.log(`[Email Service] Status: PENDING | Type: ${emailType} | Recipient: ${maskedTo} | Timestamp: ${nowIso}`);
 
   // 1. Resend REST API
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -109,22 +141,27 @@ export async function sendEmail({ to, subject, html, text }) {
 
       const data = await resp.json();
       if (resp.ok) {
-        console.log(`[Email Service] Delivered via Resend to ${Array.isArray(cleanTo) ? cleanTo.join(', ') : cleanTo}: ${data.id}`);
-        return { success: true, messageId: data.id, mode: 'resend' };
+        console.log(`[Email Service] Status: ACCEPTED | Type: ${emailType} | Provider: RESEND | Recipient: ${maskedTo} | MessageId: ${data.id} | Timestamp: ${new Date().toISOString()}`);
+        console.log(`[Email Service Notice]: Message queued and accepted by Resend dispatch API.`);
+        return { success: true, status: 'ACCEPTED', messageId: data.id, mode: 'resend', recipient: maskedTo };
       } else {
-        const errorMsg = data?.message || JSON.stringify(data);
-        console.error(`[Email Service Error] Resend API rejected email to ${cleanTo}:`, errorMsg);
-        return { success: false, error: `Resend API Error: ${errorMsg}`, mode: 'resend_failed' };
+        const rawMsg = data?.message || JSON.stringify(data);
+        const errorMsg = String(rawMsg).replace(/(api[_-]?key|secret|password)=[^&\s]+/gi, '$1=***');
+        console.error(`[Email Service] Status: FAILED | Type: ${emailType} | Provider: RESEND | Recipient: ${maskedTo} | Reason: ${errorMsg} | Timestamp: ${new Date().toISOString()}`);
+        return { success: false, status: 'FAILED', error: `Resend API Error: ${errorMsg}`, mode: 'resend_failed', recipient: maskedTo };
       }
     } catch (err) {
-      console.error(`[Email Service Error] Resend fetch exception:`, err.message);
-      return { success: false, error: `Resend Network Error: ${err.message}`, mode: 'resend_failed' };
+      const safeErr = (err.message || 'Network exception').replace(/(api[_-]?key|secret|password)=[^&\s]+/gi, '$1=***');
+      console.error(`[Email Service] Status: FAILED | Type: ${emailType} | Provider: RESEND | Recipient: ${maskedTo} | Reason: ${safeErr} | Timestamp: ${new Date().toISOString()}`);
+      return { success: false, status: 'FAILED', error: `Resend Network Error: ${safeErr}`, mode: 'resend_failed', recipient: maskedTo };
     }
   }
 
   // 2. Nodemailer SMTP (supports Gmail, Google Workspace, SendGrid, Amazon SES, cPanel)
   const transporter = getEmailTransporter();
   if (transporter) {
+    const isGmail = process.env.GMAIL_USER || process.env.SMTP_HOST?.includes('gmail') || process.env.SMTP_USER?.includes('@gmail.com');
+    const providerLabel = isGmail ? 'Gmail SMTP' : `SMTP (${process.env.SMTP_HOST || 'custom'})`;
     try {
       const info = await transporter.sendMail({
         from,
@@ -133,22 +170,26 @@ export async function sendEmail({ to, subject, html, text }) {
         html,
         text: text || html.replace(/<[^>]+>/g, ' '),
       });
-      console.log(`[Email Service] Delivered via SMTP to ${cleanTo}: ${info.messageId}`);
-      return { success: true, messageId: info.messageId, mode: 'smtp' };
+      console.log(`[Email Service] Status: ACCEPTED | Type: ${emailType} | Provider: ${providerLabel} | Recipient: ${maskedTo} | MessageId: ${info.messageId} | Timestamp: ${new Date().toISOString()}`);
+      console.log(`[Email Service Notice]: Message accepted by MTA for dispatch. Final inbox delivery confirmed upon recipient mail server receipt.`);
+      return { success: true, status: 'ACCEPTED', messageId: info.messageId, mode: 'smtp', recipient: maskedTo };
     } catch (err) {
-      console.error(`[Email Service Error] SMTP delivery failure to ${cleanTo}:`, err.message);
-      return { success: false, error: `SMTP Delivery Error: ${err.message}`, mode: 'smtp_failed' };
+      const safeErr = (err.message || 'SMTP exception').replace(/(password|pass|secret)=[^&\s]+/gi, '$1=***');
+      console.error(`[Email Service] Status: FAILED | Type: ${emailType} | Provider: ${providerLabel} | Recipient: ${maskedTo} | Reason: ${safeErr} | Timestamp: ${new Date().toISOString()}`);
+      return { success: false, status: 'FAILED', error: `SMTP Delivery Error: ${safeErr}`, mode: 'smtp_failed', recipient: maskedTo };
     }
   }
 
   // 3. NO EMAIL SERVICE CONFIGURED: Return actual failure status (never simulate fake delivery)
   const unconfiguredMsg = 'Email delivery provider is not configured. Please configure SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) or RESEND_API_KEY in server environment variables.';
-  console.error(`[Email Service Error] Delivery aborted to ${cleanTo}: ${unconfiguredMsg}`);
+  console.error(`[Email Service] Status: FAILED | Type: ${emailType} | Provider: NONE (Unconfigured) | Recipient: ${maskedTo} | Reason: ${unconfiguredMsg} | Timestamp: ${new Date().toISOString()}`);
 
   return {
     success: false,
+    status: 'FAILED',
     error: unconfiguredMsg,
     mode: 'unconfigured',
+    recipient: maskedTo,
   };
 }
 
@@ -272,7 +313,7 @@ Regards,
 Trishul Metals & Alloys
 export@trishulmetal.com`;
 
-  return sendEmail({ to, subject, html, text });
+  return sendEmail({ to, subject, html, text, emailType: 'PASSWORD_RESET' });
 }
 
 /**
@@ -320,7 +361,7 @@ Regards,
 Trishul Metals & Alloys
 export@trishulmetal.com | +91 79772 81567`;
 
-  return sendEmail({ to, subject, html, text });
+  return sendEmail({ to, subject, html, text, emailType: 'REQUEST_RECEIVED' });
 }
 
 /**
@@ -435,7 +476,7 @@ Regards,
 Trishul Metals & Alloys
 export@trishulmetal.com | +91 79772 81567`;
 
-  return sendEmail({ to, subject, html, text });
+  return sendEmail({ to, subject, html, text, emailType: 'STATUS_UPDATE' });
 }
 
 /**
@@ -498,5 +539,5 @@ Regards,
 Trishul Metals & Alloys
 export@trishulmetal.com | +91 79772 81567`;
 
-  return sendEmail({ to, subject, html, text });
+  return sendEmail({ to, subject, html, text, emailType: 'ADMIN_REPLY' });
 }

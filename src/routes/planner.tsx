@@ -544,4 +544,3 @@ function DeliveryPlannerPage() {
     </div>
   );
 }
-export default DeliveryPlannerPage;

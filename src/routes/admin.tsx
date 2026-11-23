@@ -2201,4 +2201,3 @@ function AdminConsolePage() {
     </div>
   );
 }
-export default AdminConsolePage;
