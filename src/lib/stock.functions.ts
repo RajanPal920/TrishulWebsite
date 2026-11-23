@@ -21,16 +21,34 @@ export interface StockRow {
 
 export const getStockItems = createServerFn({ method: "GET" }).handler(
   async (): Promise<StockRow[]> => {
+    // 1. Direct database query in Node / Serverless context
     try {
       const { all } = await import("../../server/db/connection.js");
       const rows = await all(
         "SELECT * FROM stock_items ORDER BY category ASC, grade ASC, size ASC"
       );
-      return (rows ?? []) as StockRow[];
-    } catch (err) {
-      console.warn("[Stock Functions Warning]:", err);
-      return [];
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows as StockRow[];
+      }
+    } catch {
+      // Non-fatal if direct DB import is unavailable in bundling
     }
+
+    // 2. Fetch from Express API endpoint if running with accessible local host
+    try {
+      const baseUrl = typeof process !== "undefined" && process.env?.VITE_APP_URL
+        ? process.env.VITE_APP_URL
+        : "http://127.0.0.1:5001";
+      const res = await fetch(`${baseUrl}/api/stock`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.stock)) {
+          return json.stock as StockRow[];
+        }
+      }
+    } catch {}
+
+    return [];
   }
 );
 
