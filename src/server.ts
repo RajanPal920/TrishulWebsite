@@ -1,5 +1,7 @@
 if (typeof process !== "undefined" && process.env) {
-  process.env["NODE_ENV"] = "production";
+  if (process.env["VERCEL"]) {
+    process.env["NODE_ENV"] = "production";
+  }
 }
 
 import "./lib/error-capture";

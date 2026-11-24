@@ -1,6 +1,24 @@
 // Captures the original Error out-of-band so server.ts can recover the stack
 // when h3 has already swallowed the throw into a generic 500 Response.
 
+// Ensure React's jsxDEV is always defined across environments (prevents SSR crash if NODE_ENV flips)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const jsxDev = require("react/jsx-dev-runtime");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const jsxProd = require("react/jsx-runtime");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require("react");
+  if (jsxDev && typeof jsxDev.jsxDEV !== "function") {
+    const impl = jsxProd.jsx || jsxProd.jsxs || React.createElement;
+    jsxDev.jsxDEV = function (type: any, props: any, key: any) {
+      return impl(type, props, key);
+    };
+  }
+} catch {
+  // Ignore in browser or non-CJS environments
+}
+
 let lastCapturedError: { error: unknown; at: number } | undefined;
 const TTL_MS = 5_000;
 
