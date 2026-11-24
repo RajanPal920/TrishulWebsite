@@ -36,13 +36,14 @@ function ProductsIndex() {
           <SectionHead as="h1"
             eyebrow="Product engineering"
             title="CRA piping & structural component catalogue"
-            intro="Flanges, buttweld and forged fittings, pipes and tubes, structural steel sections, bars and plate in corrosion-resistant alloys. Each product page covers dimensional standards, size ranges, typical applications and the inspection scope we supply against."
+            intro="Flanges, fittings, pipes and tubes in nickel alloy, duplex and stainless steel; carbon and structural steel; and PVC piping from our sister company Apex Polymer & Engineering."
           />
         </div>
       </Section>
 
       {categories.map((cat) => (
         <Section key={cat} id={cat} className="border-b border-border scroll-mt-20">
+          {cat === "pipe-fittings" && <span id="buttweld-fittings" className="scroll-mt-24 block" />}
           <SectionHead eyebrow={categoryMeta[cat].name} title={categoryMeta[cat].singular} intro={categoryMeta[cat].blurb} />
            <div className="motion-stagger-grid mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {productsByCategory(cat).map((p) => (

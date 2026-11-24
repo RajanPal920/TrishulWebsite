@@ -173,7 +173,7 @@ export function HomeHero() {
 
           <div className="lg:pl-6 xl:pl-8">
             <dt className="font-display text-2xl sm:text-3xl font-bold text-primary">
-              EN 10204 <CountUp end={31} divisor={10} />
+              EN 10204 3.1
             </dt>
             <dd className="mt-1 text-xs sm:text-sm font-medium text-foreground">
               Certification standard

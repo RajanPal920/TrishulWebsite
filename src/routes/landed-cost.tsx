@@ -234,6 +234,23 @@ function LandedCostPage() {
               </div>
             </div>
 
+            {port.country === "United States" && (
+              <div className="surface-panel rounded-md border border-primary/40 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-xs uppercase tracking-wider text-primary font-bold">
+                    US Customs Tariff Notice: Section 232 Rules
+                  </p>
+                  <Link to="/trade-desk" className="text-xs text-primary font-semibold hover:underline">
+                    Trade Desk Reference →
+                  </Link>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Under US Presidential Proclamations, Section 232 (50% ad valorem) applies strictly to iron and steel articles (HTS Chapters 72 and 73, e.g. 7304, 7306, 7307).
+                  <strong className="text-foreground"> Nickel alloys</strong> (HTS Chapter 75: Inconel 625, Hastelloy C276, Monel 400, Incoloy 825) and <strong className="text-foreground">polymers</strong> (HTS Chapter 39) are legally classified outside the scope of Section 232 steel measures and enter under standard US MFN rates (~3.0% / 5.0%).
+                </p>
+              </div>
+            )}
+
             <SpecTable
               caption="Cost build-up"
               head={["Cost element", "Basis", currency.code]}

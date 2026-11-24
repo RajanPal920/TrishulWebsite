@@ -1,5 +1,27 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/industries/oil-gas",
+      "destination": "/industries/offshore-oil-and-gas",
+      "permanent": true
+    },
+    {
+      "source": "/industries/data-centres-liquid-cooling",
+      "destination": "/industries/data-centres-and-liquid-cooling",
+      "permanent": true
+    },
+    {
+      "source": "/industries/nuclear-power",
+      "destination": "/industries/power-generation",
+      "permanent": true
+    },
+    {
+      "source": "/industries/marine-defense",
+      "destination": "/industries/marine-and-shipbuilding",
+      "permanent": true
+    }
+  ],
   "functions": {
     "api/index.js": {
       "includeFiles": "server/**,node_modules/sql.js/dist/**"

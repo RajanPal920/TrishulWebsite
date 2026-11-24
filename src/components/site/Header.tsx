@@ -16,6 +16,58 @@ interface NavGroup {
   items: NavItem[];
 }
 
+export interface IndustryColumn {
+  title: string;
+  items: { to: string; label: string }[];
+}
+
+export const industryColumns: IndustryColumn[] = [
+  {
+    title: "Oil, Gas & Offshore",
+    items: [
+      { to: "/industries/offshore-oil-and-gas", label: "Offshore Oil & Gas" },
+      { to: "/industries/onshore-oil-and-gas", label: "Onshore Oil & Gas" },
+      { to: "/industries/subsea-engineering", label: "Subsea Engineering" },
+      { to: "/industries/refineries", label: "Refineries & Upgrading" },
+      { to: "/industries/lng-plants", label: "LNG Plants & Terminals" },
+      { to: "/industries/fpso-projects", label: "FPSO Piping Packages" },
+    ],
+  },
+  {
+    title: "Process & Chemicals",
+    items: [
+      { to: "/industries/chemical-processing", label: "Chemical Processing" },
+      { to: "/industries/petrochemical-plants", label: "Petrochemical Plants" },
+      { to: "/industries/fertilizer-plants", label: "Fertilizer Plants" },
+      { to: "/industries/gas-processing", label: "Gas Processing" },
+      { to: "/industries/pulp-and-paper", label: "Pulp & Paper" },
+      { to: "/industries/sour-service-applications", label: "Sour Service Duty" },
+    ],
+  },
+  {
+    title: "Power & Energy",
+    items: [
+      { to: "/industries/power-generation", label: "Power Generation" },
+      { to: "/industries/green-hydrogen", label: "Green Hydrogen & Ammonia" },
+      { to: "/industries/carbon-capture", label: "Carbon Capture & Storage" },
+      { to: "/industries/offshore-wind-and-renewables", label: "Offshore Wind & Renewables" },
+      { to: "/industries/high-temperature-applications", label: "High-Temperature Systems" },
+      { to: "/industries/heat-exchangers", label: "Heat Exchangers" },
+    ],
+  },
+  {
+    title: "Water, Marine & Tech",
+    items: [
+      { to: "/industries/desalination-plants", label: "Desalination Plants" },
+      { to: "/industries/marine-and-shipbuilding", label: "Marine & Shipbuilding" },
+      { to: "/industries/seawater-systems", label: "Seawater Systems" },
+      { to: "/industries/water-and-wastewater", label: "Water & Wastewater" },
+      { to: "/industries/data-centres-and-liquid-cooling", label: "Data Centres & Cooling" },
+      { to: "/industries/semiconductor-fabs", label: "Semiconductor Fabs" },
+    ],
+  },
+];
+
 const productsMenu: NavGroup = {
   label: "Products & Supply",
   items: [
@@ -41,13 +93,13 @@ const buyerToolsMenu: NavGroup = {
 const industriesMenu: NavGroup = {
   label: "Industries",
   items: [
-    { to: "/industries", label: "All industries overview", desc: "Critical piping supply across 12 sectors" },
-    { to: "/industries/oil-gas", label: "Oil, gas & offshore", desc: "Upstream, subsea & FPSO high-pressure piping" },
-    { to: "/industries/data-centres-liquid-cooling", label: "Data centres & cooling", desc: "Direct-to-chip & immersion cooling manifolds" },
-    { to: "/industries/green-hydrogen", label: "Green hydrogen & ammonia", desc: "High-pressure H₂ embrittlement resistant alloys" },
-    { to: "/industries/nuclear-power", label: "Nuclear power generation", desc: "ASME Section III safety class 1-3 piping" },
-    { to: "/industries/chemical-processing", label: "Chemical & petrochemical", desc: "Corrosive acid & high-temperature service" },
-    { to: "/industries/marine-defense", label: "Marine & naval defence", desc: "Seawater piping, Cu-Ni & super duplex systems" },
+    { to: "/industries", label: "All 26 industries overview", desc: "Critical piping supply across 26 sectors" },
+    { to: "/industries/offshore-oil-and-gas", label: "Offshore oil & gas", desc: "Upstream, subsea & platform piping" },
+    { to: "/industries/data-centres-and-liquid-cooling", label: "Data centres & cooling", desc: "Direct-to-chip & immersion manifolds" },
+    { to: "/industries/green-hydrogen", label: "Green hydrogen & ammonia", desc: "High-pressure H₂ embrittlement resistance" },
+    { to: "/industries/power-generation", label: "Power generation", desc: "ASME Section III safety class piping" },
+    { to: "/industries/chemical-processing", label: "Chemical & petrochemical", desc: "Corrosive acid & high-temp service" },
+    { to: "/industries/marine-and-shipbuilding", label: "Marine & naval defence", desc: "Seawater piping, Cu-Ni & duplex" },
   ],
 };
 
@@ -129,25 +181,62 @@ function DesktopDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-md border border-border bg-card/95 p-2 shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 duration-150">
-          <ul className="space-y-1">
-            {group.items.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  onClick={onClose}
-                  activeProps={{ className: "bg-primary/10 text-primary font-semibold" }}
-                  className="block rounded-sm px-3 py-2 text-xs transition-colors hover:bg-primary/10 hover:text-primary xl:text-sm"
-                >
-                  <div className="font-medium text-foreground">{item.label}</div>
-                  {item.desc && (
-                    <div className="text-[11px] text-muted-foreground line-clamp-1">{item.desc}</div>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        group.label === "Industries" ? (
+          <div className="absolute left-1/2 -translate-x-1/2 top-full z-50 mt-2 w-[840px] rounded-md border border-border bg-card/98 p-5 shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 duration-150">
+            <div className="grid grid-cols-4 gap-4">
+              {industryColumns.map((col) => (
+                <div key={col.title}>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-primary font-semibold mb-2 pb-1 border-b border-border/60">
+                    {col.title}
+                  </p>
+                  <ul className="space-y-1">
+                    {col.items.map((item) => (
+                      <li key={item.to}>
+                        <Link
+                          to={item.to}
+                          onClick={onClose}
+                          className="block rounded-sm px-2 py-1 text-xs text-foreground/85 transition-colors hover:bg-primary/10 hover:text-primary"
+                        >
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Comprehensive CRA piping supply for 26 demanding sectors</span>
+              <Link
+                to="/industries"
+                onClick={onClose}
+                className="font-semibold text-primary hover:underline flex items-center gap-1"
+              >
+                View all 26 industries →
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-md border border-border bg-card/95 p-2 shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 duration-150">
+            <ul className="space-y-1">
+              {group.items.map((item) => (
+                <li key={item.to}>
+                  <Link
+                    to={item.to}
+                    onClick={onClose}
+                    activeProps={{ className: "bg-primary/10 text-primary font-semibold" }}
+                    className="block rounded-sm px-3 py-2 text-xs transition-colors hover:bg-primary/10 hover:text-primary xl:text-sm"
+                  >
+                    <div className="font-medium text-foreground">{item.label}</div>
+                    {item.desc && (
+                      <div className="text-[11px] text-muted-foreground line-clamp-1">{item.desc}</div>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
       )}
     </div>
   );
@@ -205,7 +294,7 @@ export function Header() {
         </Link>
 
         {/* Desktop Navigation Links with Dropdown Groups */}
-        <nav className="hidden items-center gap-3 lg:flex xl:gap-5" aria-label="Main">
+        <nav className="hidden items-center gap-3 min-[1180px]:flex xl:gap-5" aria-label="Main">
           {/* 1. Products & Supply Menu */}
           <DesktopDropdown
             group={productsMenu}
@@ -262,7 +351,7 @@ export function Header() {
           {user ? (
             <Link
               to="/portal"
-              className="hidden lg:inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs xl:text-sm font-medium text-primary transition-colors hover:bg-primary/20 whitespace-nowrap"
+              className="hidden min-[1180px]:inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs xl:text-sm font-medium text-primary transition-colors hover:bg-primary/20 whitespace-nowrap"
             >
               <UserIcon className="h-3.5 w-3.5" />
               <span>Portal ({user.fullName?.split(" ")[0] || "Account"})</span>
@@ -270,14 +359,14 @@ export function Header() {
           ) : (
             <Link
               to="/auth"
-              className="hidden lg:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
+              className="hidden min-[1180px]:inline-flex rounded-sm border border-border px-3 py-1.5 text-xs xl:text-sm font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary whitespace-nowrap"
             >
               Customer login
             </Link>
           )}
           <Link
             to="/rfq"
-            className="hidden lg:inline-flex rounded-sm bg-primary px-3.5 sm:px-4 py-1.5 text-xs xl:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 whitespace-nowrap"
+            className="hidden min-[1180px]:inline-flex rounded-sm bg-primary px-3.5 sm:px-4 py-1.5 text-xs xl:text-sm font-semibold text-primary-foreground shadow-[var(--shadow-gold)] transition-opacity hover:opacity-90 whitespace-nowrap"
           >
             Request quote
           </Link>
@@ -287,7 +376,7 @@ export function Header() {
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-label="Toggle navigation"
-            className="flex items-center gap-1.5 rounded-sm border border-border/80 bg-card/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-foreground transition-all hover:border-primary hover:text-primary active:scale-95 lg:hidden"
+            className="flex items-center gap-1.5 rounded-sm border border-border/80 bg-card/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-foreground transition-all hover:border-primary hover:text-primary active:scale-95 min-[1180px]:hidden"
           >
             {open ? (
               <>
@@ -314,7 +403,7 @@ export function Header() {
       {/* Mobile Drawer */}
       {open ? (
         <nav
-          className="border-t border-border bg-card px-5 py-5 lg:hidden animate-in fade-in-50 duration-150 max-h-[calc(100vh-80px)] overflow-y-auto"
+          className="border-t border-border bg-card px-5 py-5 min-[1180px]:hidden animate-in fade-in-50 duration-150 max-h-[calc(100vh-80px)] overflow-y-auto"
           aria-label="Mobile"
         >
           <div className="space-y-5">
@@ -362,23 +451,40 @@ export function Header() {
 
             {/* 3. Industries Group */}
             <div className="border-t border-border/50 pt-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold mb-2">
-                Industries
-              </p>
-              <ul className="grid grid-cols-2 gap-2">
-                {industriesMenu.items.map((item) => (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      onClick={() => setOpen(false)}
-                      activeProps={{ className: "text-primary font-semibold" }}
-                      className="block py-1 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary truncate"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary font-semibold">
+                  Industries (26 Sectors)
+                </p>
+                <Link
+                  to="/industries"
+                  onClick={() => setOpen(false)}
+                  className="text-[11px] font-semibold text-primary hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {industryColumns.map((col) => (
+                  <div key={col.title} className="rounded border border-border/60 bg-background/50 p-2.5">
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-primary font-bold mb-1.5">
+                      {col.title}
+                    </p>
+                    <ul className="space-y-1">
+                      {col.items.slice(0, 3).map((item) => (
+                        <li key={item.to}>
+                          <Link
+                            to={item.to}
+                            onClick={() => setOpen(false)}
+                            className="block py-0.5 text-xs text-muted-foreground hover:text-primary"
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
             {/* 4. Knowledge Group */}
@@ -474,18 +580,6 @@ export function Header() {
                 >
                   WhatsApp Desk ↗
                 </a>
-              </div>
-
-              <div className="border-t border-border/50 pt-2 flex items-center justify-between">
-                <Link
-                  to="/admin"
-                  onClick={() => setOpen(false)}
-                  className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors py-1"
-                >
-                  <Shield className="h-3.5 w-3.5 text-primary" />
-                  <span>Admin Login</span>
-                </Link>
-                <span className="font-mono text-[10px] text-muted-foreground/60">Owner Console</span>
               </div>
             </div>
           </div>

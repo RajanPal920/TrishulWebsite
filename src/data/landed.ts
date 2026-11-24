@@ -157,17 +157,44 @@ export function computeLanded(input: {
     const fobBase = lines.slice(0, 4).reduce((s, l) => s + l.usd, 0);
     const cifBase = lines.reduce((s, l) => s + l.usd, 0);
     const dutiableBase = isFobValued ? fobBase : cifBase;
-    const dutyAmount = dutiableBase * input.port.dutyPct;
 
-    const note =
-      input.port.country === "United States"
-        ? `Section 232 (50% on steel pipe, fittings & flanges) on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
-        : isFobValued
-          ? `Indicative ${(input.port.dutyPct * 100).toFixed(1)} % on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
-          : `Indicative ${(input.port.dutyPct * 100).toFixed(1)} % on CIF value ($${cifBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+    // Check material classification for Section 232 applicability
+    const isSteel = ["cs", "ltcs", "ss304", "ss316", "ss904", "duplex", "sduplex"].includes(input.band.id);
+    const isNickel = ["n625", "c276", "monel", "n825"].includes(input.band.id);
+    const isPvc = input.band.id === "pvc";
+
+    let effectiveDutyRate = input.port.dutyPct;
+    let dutyLabel = "Import duty & local levies";
+    let note = "";
+
+    if (input.port.country === "United States") {
+      if (isSteel) {
+        effectiveDutyRate = 0.50; // Section 232 50% tariff on HTS Chapters 72 & 73 steel
+        dutyLabel = "US Import Duty (Section 232 Steel Tariff 50%)";
+        note = `Section 232 (50% on steel pipe, fittings & flanges HTS 7304/7307) on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+      } else if (isNickel) {
+        effectiveDutyRate = 0.03; // US MFN duty for Chapter 75 Nickel Articles (~3.0%)
+        dutyLabel = "US Import Duty (MFN Chapter 75 Nickel)";
+        note = `US MFN rate (3.0% for Chapter 75 nickel alloys — Section 232 steel tariff exempt) on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+      } else if (isPvc) {
+        effectiveDutyRate = 0.05; // US MFN duty for Chapter 39 Plastic Piping (~5.0%)
+        dutyLabel = "US Import Duty (MFN Chapter 39 Polymers)";
+        note = `US MFN rate (5.0% for polymer piping — Section 232 exempt) on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+      } else {
+        effectiveDutyRate = 0.03;
+        dutyLabel = "US Import Duty (MFN)";
+        note = `US MFN rate on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+      }
+    } else {
+      note = isFobValued
+        ? `Indicative ${(effectiveDutyRate * 100).toFixed(1)} % on FOB value ($${fobBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
+        : `Indicative ${(effectiveDutyRate * 100).toFixed(1)} % on CIF value ($${cifBase.toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
+    }
+
+    const dutyAmount = dutiableBase * effectiveDutyRate;
 
     lines.push({
-      label: input.port.country === "United States" ? "US Import Duty (Section 232)" : "Import duty & local levies",
+      label: dutyLabel,
       usd: dutyAmount,
       note,
     });

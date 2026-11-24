@@ -89,20 +89,20 @@ function VendorRegistrationPage() {
 
   const fullProfileText = `VENDOR ONBOARDING SUMMARY — TRISHUL METALS & ALLOYS
 Legal Entity Name: Trishul Metals & Alloys
-Constitution: Proprietorship / Registered Merchant Exporter
+Constitution: Partnership firm
+Parent Group: Modi Group of Industries
+Group Founder & Principal: Ramesh Modi
 Headquarters: Suite 206, 89/91 Durgadevi Street, Mumbai, Maharashtra 400004, India
 Central Warehouse: Plot No. 1818, Road No. 23, Kalamboli Warehouse Complex (KWC), Kalamboli, Navi Mumbai 410218, India
 GSTIN: 27AAYFT9507B1ZP
-IEC (DGFT): AAYFT9507B
-Permanent Account Number (PAN): AAYFT9507B
+IEC (DGFT India): AAYFT9507B
+Income Tax PAN: AAYFT9507B
 MSME / Udyam: UDYAM-MH-19-0404041
 DPIIT Startup India ID: DIPP243391
 ISO 9001:2015 Cert No.: 26MEQXH09 (Magnitude Management Services / EGAC / IAF MLA)
-Bank Name: HDFC Bank Ltd.
-SWIFT Code: HDFCINBBXXX
-IFSC Code: HDFC0000060
 Official Website: https://www.trishulmetal.com
-Export Contact: export@trishulmetal.com / +91 79772 81567`;
+Export Contact: export@trishulmetal.com / +91 79772 81567
+Bank Remittance Notice: Bank details are issued on company letterhead with the proforma invoice. Always confirm by phone before paying.`;
 
   const copyFullProfile = () => {
     navigator.clipboard.writeText(fullProfileText);
@@ -137,8 +137,8 @@ Export Contact: export@trishulmetal.com / +91 79772 81567`;
       href: "/certificates/dpiit-recognition.pdf",
     },
     {
-      title: "CIFFA Freight Forwarding Cert",
-      desc: "International Trade & Multimodal Logistics",
+      title: "CIFFA Training Certificate (Govind Modi)",
+      desc: "Canadian International Freight Forwarders Association — Personal Training",
       href: "/certificates/ciffa-certificate.pdf",
     },
     {
@@ -192,7 +192,9 @@ Export Contact: export@trishulmetal.com / +91 79772 81567`;
 
             <div className="grid gap-3 sm:grid-cols-2">
               <CopyField label="Legal Entity Name" value="Trishul Metals & Alloys" />
-              <CopyField label="Constitution" value="Proprietorship (Export House)" />
+              <CopyField label="Constitution" value="Partnership firm" />
+              <CopyField label="Parent Group" value="Modi Group of Industries" />
+              <CopyField label="Group Founder & Principal" value="Ramesh Modi" />
               <CopyField label="GSTIN (Maharashtra)" value="27AAYFT9507B1ZP" />
               <CopyField label="IEC (DGFT India)" value="AAYFT9507B" />
               <CopyField label="Income Tax PAN" value="AAYFT9507B" />
@@ -207,26 +209,26 @@ Export Contact: export@trishulmetal.com / +91 79772 81567`;
             </div>
           </div>
 
-          {/* Card 2: Banking & Forex Wire Remittance */}
+          {/* Card 2: Banking & Wire Remittance Notice */}
           <div className="surface-panel rounded-md p-6 border border-border space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-border">
               <CreditCard className="h-5 w-5 text-primary" />
               <h2 className="text-base font-bold text-foreground">
-                Banking & International Wire Remittance
+                Banking & Wire Remittance Security Policy
               </h2>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <CopyField label="Beneficiary Name" value="Trishul Metals & Alloys" />
-              <CopyField label="Bank Name" value="HDFC Bank Ltd." />
-              <CopyField label="Bank Branch" value="Opera House / Fort, Mumbai" />
-              <CopyField label="SWIFT / BIC Code" value="HDFCINBBXXX" />
-              <CopyField label="IFSC Code (Domestic INR)" value="HDFC0000060" />
-              <CopyField label="Account Number / IBAN" value="Confirmed on Official Invoice" />
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-5 space-y-3">
+              <p className="text-sm font-semibold text-foreground">
+                Bank details are issued on company letterhead with the proforma invoice. Always confirm by phone before paying.
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                For international fraud prevention and buyer security, Trishul Metals & Alloys never publishes live bank account numbers or wire remittance codes online. Bank accounts are verified directly with procurement officers upon contract award.
+              </p>
             </div>
 
-            <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground leading-relaxed">
-              <span className="font-semibold text-primary">Multi-Currency Capability: </span>
+            <div className="mt-4 rounded-md border border-border bg-background/50 p-3.5 text-xs text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">Multi-Currency Capability: </span>
               Trishul accepts telegraphic wire transfers (TT/SWIFT) in USD, EUR, GBP, AED, SAR, SGD, and INR. Irrevocable Letters of Credit (LC) at sight from first-class international banks are supported.
             </div>
           </div>

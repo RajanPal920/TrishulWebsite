@@ -4,6 +4,7 @@ import { CtaBand } from "@/components/site/parts";
 import { FacilityGallery } from "@/components/site/FacilityGallery";
 import { GradeFinder } from "@/components/site/GradeFinder";
 import { SubcomponentBento } from "@/components/site/SubcomponentBento";
+import { HomeSourcingScope } from "@/components/site/HomeSourcingScope";
 import { HomeHero } from "@/components/site/HomeHero";
 import { TechIcon, type TechIconName } from "@/components/site/icons";
 import { matrixCount } from "@/data/matrix";
@@ -225,7 +226,7 @@ function Home() {
             to="/matrix"
             className="rounded-sm border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           >
-            Browse all {matrixCount()} grade × product pages →
+            Browse every grade and product combination →
           </Link>
           <Link
             to="/faq"
@@ -236,15 +237,17 @@ function Home() {
         </div>
       </Section>
 
+      <HomeSourcingScope />
+
       <SubcomponentBento />
 
       <Section className="border-t border-border bg-background">
         <SectionHead
           eyebrow="Buyer tools"
-          title="Check stock, size the line, send the MTO"
-          intro="Three things buyers usually wait days for — availability, calculations and a priced enquiry — done in one visit."
+          title="Engineering calculators, landed cost, and instant MTO review"
+          intro="Everything buyers and project engineers need to qualify material, verify landed tariffs, check inventory, and submit bills of materials."
         />
-        <div className="motion-stagger-grid mt-10 grid gap-6 md:grid-cols-3">
+        <div className="motion-stagger-grid mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <CardLink
             to="/stock"
             eyebrow="Live stock"
@@ -253,17 +256,38 @@ function Home() {
             interactive
           />
           <CardLink
-            to="/tools"
-            eyebrow="Calculators"
-            title="Pipe, pressure & flange tools"
-            body="Pipe weight by alloy density, Barlow allowable pressure, flange class selection and NPS/schedule reference tables."
+            to="/rfq"
+            eyebrow="Instant BOQ / MTO"
+            title="Bill of materials upload"
+            body="Paste or upload piping bills of quantities (.xlsx, .csv, copy-paste) for automatic item recognition and fast quotation."
             interactive
           />
           <CardLink
-            to="/quality"
-            eyebrow="Documentation"
-            title="Sample mill test certificate"
-            body="See a redacted EN 10204 3.1 certificate before you order — chemistry, mechanicals, NDT and heat traceability."
+            to="/landed-cost"
+            eyebrow="Tariffs & Incoterms"
+            title="Landed cost estimator"
+            body="Calculate CIF, CFR, DDP and Section 232 customs duty implications across 19 global destination ports."
+            interactive
+          />
+          <CardLink
+            to="/planner"
+            eyebrow="Project schedule"
+            title="Procurement planner"
+            body="Interactive piping package builder with multi-grade scheduling, specification checks, and milestone tracking."
+            interactive
+          />
+          <CardLink
+            to="/trade-desk"
+            eyebrow="Duty & Logistics"
+            title="Trade desk & tariff schedules"
+            body="Verified customs classification, HS codes, Section 232 steel rates, and destination country import documentation."
+            interactive
+          />
+          <CardLink
+            to="/vendor-registration"
+            eyebrow="Audit & Compliance"
+            title="Vendor registration pack"
+            body="One-click download of GST, IEC, MSME, ISO 9001 and verified banking policy on corporate letterhead."
             interactive
           />
         </div>
@@ -340,7 +364,7 @@ function Home() {
         </div>
         <div className="mt-8">
           <Link to="/industries" className="text-sm font-semibold text-primary">
-            All 20 industry applications →
+            All {industries.length} industry applications →
           </Link>
         </div>
       </Section>
@@ -389,23 +413,16 @@ function Home() {
               <p className="font-mono text-[11px] uppercase text-primary">Africa</p>
               <h3 className="mt-3 font-display text-xl font-semibold text-foreground">Verification where it matters most</h3>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                Documentation and inspection rigor provide an important point of difference in markets where added verification matters most. See our{" "}
-                <Link to="/clients" className="font-semibold text-primary underline-offset-4 hover:underline focus-visible:underline">
-                  Lagos, Nigeria topside piping project on the Client Trust Feed
-                </Link>{" "}
-                for a live example.
+                Documentation and inspection rigor provide an important point of difference in markets where added verification matters most. Complete EN 10204 3.1 material test certificates and third-party inspection dossiers are supplied with every consignment.
               </p>
             </article>
 
             <article className="scroll-reveal min-w-0 border-l-2 border-primary bg-card/90 p-6 lg:p-8">
               <TechIcon name="globe" className="mb-3 text-primary" />
               <p className="font-mono text-[11px] uppercase text-primary">Worldwide</p>
-              <p className="mt-3 font-display text-4xl font-semibold text-primary">
-                {countriesServedStat?.value ?? "38"}
-              </p>
-              <h3 className="mt-1 font-display text-xl font-semibold text-foreground">Countries served across five continents</h3>
+              <h3 className="mt-3 font-display text-xl font-semibold text-foreground">Exports to the Middle East, Europe, Africa and Southeast Asia</h3>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                {countriesServedStat?.note ?? "Direct exports and EPC nominated supply across five continents."} The same documentation and inspection discipline is applied to every consignment, regardless of destination.
+                Direct exports and EPC-nominated supply across key energy, maritime and process corridors. The same documentation and inspection discipline is applied to every consignment, regardless of destination.
               </p>
             </article>
           </div>
@@ -449,12 +466,9 @@ function Home() {
           </div>
           <div className="py-7 md:pl-8">
             <p className="eyebrow">Responsive RFQs</p>
-            <p className="mt-3 font-display text-4xl font-semibold text-primary">
-              {rfqResponseStat?.value ?? "< 6 h"}
-            </p>
-            <h3 className="mt-2 text-xl font-semibold">Median RFQ response</h3>
+            <h3 className="mt-3 text-xl font-semibold">Fast specification review</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {rfqResponseStat?.note ?? "Working-hours response time to technically complete enquiries."}
+              Every enquiry is reviewed against governing standards before quotation to prevent on-site discrepancies.
             </p>
           </div>
         </div>

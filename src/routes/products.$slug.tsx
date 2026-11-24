@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import {
   Section,
   SectionHead,
@@ -31,10 +31,14 @@ export const Route = createFileRoute("/products/$slug")({
       return { meta: [{ title: "Product unavailable | Trishul Metals" }, { name: "robots", content: "noindex" }] };
     }
     const p = loaderData.product;
-    const title =
-      p.category === "pvc-piping"
-        ? `${p.name} — UPVC, CPVC & SWR | Trishul Metals`
-        : `${p.name} — Alloy & Stainless | Trishul Metals`;
+    let title = `${p.name} — Alloy & Stainless | Trishul Metals`;
+    if (p.slug === "structural-beams") {
+      title = "Structural Beams (ISMB, ISHB, UB, UC, HEA, HEB) — IS 2062 / EN 10025 / ASTM A36";
+    } else if (p.category === "structural") {
+      title = `${p.name} — Carbon & Structural Steel (IS 2062 / EN 10025) | Trishul Metals`;
+    } else if (p.category === "pvc-piping") {
+      title = `${p.name} — UPVC, CPVC & SWR | Trishul Metals`;
+    }
     return {
       meta: [
         { title },
@@ -158,6 +162,37 @@ function ProductPage() {
           </div>
         </Section>
       ) : null}
+
+      <Section className="border-t border-border bg-card/20">
+        <div className="surface-panel rounded-md border border-border p-6 md:p-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="max-w-2xl">
+              <Eyebrow>BIM &amp; Engineering Downloads</Eyebrow>
+              <h2 className="mt-2 text-2xl font-bold text-foreground">
+                Parametric 2D DXF &amp; 3D STL Models Available
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                Download verified dimensional technical drawings and CAD solids for {p.name} across full NPS ranges and pressure classes, generated against governing ASME/ASTM engineering dimensions with standard part codes.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 shrink-0">
+              <Link
+                to="/cad"
+                className="inline-flex items-center gap-2 rounded-sm bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                <span>Open CAD Library →</span>
+              </Link>
+              <Link
+                to="/rfq"
+                search={{ product: p.name }}
+                className="inline-flex items-center gap-2 rounded-sm border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
+              >
+                <span>Request Quote</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </Section>
 
       <CtaBand title={`Request a quotation for ${p.name}`} />
     </>

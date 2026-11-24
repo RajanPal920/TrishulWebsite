@@ -74,13 +74,16 @@ export function Footer() {
         <div>
           <p className="eyebrow">Products</p>
           <ul className="mt-4 space-y-2">
-            {["Flanges", "Pipe Fittings"].map((label) => (
-              <li key={label}>
-                <Link to="/products" className="text-sm text-muted-foreground hover:text-primary">
-                  {label}
-                </Link>
-              </li>
-            ))}
+            <li>
+              <a href="/products#flanges" className="text-sm text-muted-foreground hover:text-primary">
+                Flanges
+              </a>
+            </li>
+            <li>
+              <a href="/products#buttweld-fittings" className="text-sm text-muted-foreground hover:text-primary">
+                Pipe Fittings
+              </a>
+            </li>
             <li>
               <Link to="/matrix" className="text-sm text-muted-foreground hover:text-primary">
                 Grade × product directory
@@ -113,6 +116,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link to="/vendor-registration" className="text-sm text-muted-foreground hover:text-primary">
+                Vendor onboarding pack
+              </Link>
+            </li>
+            <li>
               <Link to="/faq" className="text-sm text-muted-foreground hover:text-primary">
                 Procurement FAQ
               </Link>
@@ -128,7 +136,7 @@ export function Footer() {
               </Link>
             </li>
             <li>
-              <a href={company.social.linkedin} className="text-sm text-muted-foreground hover:text-primary">
+              <a href={company.social.linkedin} className="text-sm text-muted-foreground hover:text-primary" target="_blank" rel="noopener noreferrer">
                 LinkedIn
               </a>
             </li>
@@ -147,22 +155,22 @@ export function Footer() {
                 Terms of Service
               </Link>
             </li>
-            <li>
-              <Link to="/admin" className="text-xs text-muted-foreground/60 hover:text-primary transition-colors">
-                Admin Login
-              </Link>
-            </li>
           </ul>
         </div>
       </div>
       <div className="border-t border-border px-5 py-6 md:px-10">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            © {new Date().getFullYear()} {company.legalName} · Grades supplied subject to availability and specification review
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              © {new Date().getFullYear()} {company.legalName} · Grades supplied subject to availability and specification review
+            </p>
+            <p className="text-[11px] text-muted-foreground/80">
+              A <strong className="text-foreground">Modi Group of Industries</strong> company · Alloyaage Products · Metalloys Inc · Trishul Metals & Alloys · Apex Polymer & Engineering
+            </p>
+          </div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
+            Mumbai &amp; Kalamboli, India
           </p>
-          <Link to="/admin" className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50 hover:text-primary transition-colors">
-            Admin Console
-          </Link>
         </div>
       </div>
     </footer>

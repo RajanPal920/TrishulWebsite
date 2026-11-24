@@ -27,6 +27,14 @@ export const legacyRedirects: Record<string, string> = {
   "/products/industrial-fasteners": "/products",
   "/products/steel-raw-materials/": "/materials",
   "/products/steel-raw-materials": "/materials",
+  "/industries/oil-gas": "/industries/offshore-oil-and-gas",
+  "/industries/oil-gas/": "/industries/offshore-oil-and-gas",
+  "/industries/data-centres-liquid-cooling": "/industries/data-centres-and-liquid-cooling",
+  "/industries/data-centres-liquid-cooling/": "/industries/data-centres-and-liquid-cooling",
+  "/industries/nuclear-power": "/industries/power-generation",
+  "/industries/nuclear-power/": "/industries/power-generation",
+  "/industries/marine-defense": "/industries/marine-and-shipbuilding",
+  "/industries/marine-defense/": "/industries/marine-and-shipbuilding",
 };
 
 export function legacyRedirectTarget(pathname: string): string | undefined {

@@ -11,6 +11,8 @@ import { submitRfq } from "@/lib/rfq.functions";
 import { rfqCertificationOptions, rfqProcessingOptions, rfqUnits } from "@/data/rfq-options";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import { parseBoqTable } from "@/lib/boq";
+import { extractRowsFromFile } from "@/lib/xlsx-lite";
 import {
   FileSpreadsheet,
   LayoutGrid,
@@ -317,17 +319,33 @@ function Rfq() {
 
   const handleBoqTextChange = (text: string) => {
     setBoqInputText(text);
-    setBoqParsedLines(parseBoqText(text));
+    const parsed = parseBoqTable(text).map((p) => ({
+      material: p.material,
+      product: p.product,
+      size: p.size,
+      rating: p.rating,
+      facing: p.facing,
+      quantity: p.quantity,
+      unit: p.unit,
+      cutLength: p.cutLength || "",
+      processing: p.processing || [],
+    }));
+    setBoqParsedLines(parsed);
   };
 
-  const handleBoqFileUpload = (file: File) => {
+  const handleBoqFileUpload = async (file: File) => {
     setBoqFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = String(e.target?.result || "");
+    try {
+      const content = await extractRowsFromFile(file);
       handleBoqTextChange(content);
-    };
-    reader.readAsText(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = String(e.target?.result || "");
+        handleBoqTextChange(content);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const applyBoq = (mode: "append" | "replace") => {

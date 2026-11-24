@@ -201,10 +201,10 @@ export const credentials: Credential[] = [
     documentKey: "dpiit-recognition",
   },
   {
-    name: "CIFFA — International Freight Forwarding",
+    name: "CIFFA — Freight Forwarding Training (Govind Modi)",
     issuer: "Canadian International Freight Forwarders Association (CIFFA) / Centennial College",
     detail:
-      "Certified international freight-forwarding competency on our export desk — supporting correct Incoterms, documentation and multimodal export handling.",
+      "Govind Modi's personal freight-forwarding training qualification — supporting correct Incoterms, documentation and multimodal export handling.",
     documentKey: "ciffa-certificate",
   },
 ];
