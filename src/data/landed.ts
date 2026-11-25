@@ -74,7 +74,8 @@ export const materialBands: MaterialBand[] = [
   { id: "ss904", label: "Stainless 904L / 317L", usdPerKg: 15.5 },
   { id: "duplex", label: "Duplex 2205 (S31803 / S32205)", usdPerKg: 13.8 },
   { id: "sduplex", label: "Super duplex 2507 (S32750 / S32760)", usdPerKg: 19.6 },
-  { id: "n825", label: "Incoloy 825 / Alloy 20", usdPerKg: 32.0 },
+  { id: "n825", label: "Incoloy 825 (UNS N08825)", usdPerKg: 32.0 },
+  { id: "alloy20", label: "Alloy 20 / Carpenter 20 (UNS N08020)", usdPerKg: 34.0 },
   { id: "n625", label: "Inconel 625 / 601", usdPerKg: 48.5 },
   { id: "c276", label: "Hastelloy C276 / C22", usdPerKg: 62.0 },
   { id: "monel", label: "Monel 400 / K500", usdPerKg: 44.0 },
@@ -159,7 +160,7 @@ export function computeLanded(input: {
     const dutiableBase = isFobValued ? fobBase : cifBase;
 
     // Check material classification for Section 232 applicability
-    const isSteel = ["cs", "ltcs", "ss304", "ss316", "ss904", "duplex", "sduplex"].includes(input.band.id);
+    const isSteel = ["cs", "ltcs", "ss304", "ss316", "ss904", "duplex", "sduplex", "alloy20"].includes(input.band.id);
     const isNickel = ["n625", "c276", "monel", "n825"].includes(input.band.id);
     const isPvc = input.band.id === "pvc";
 

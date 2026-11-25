@@ -9,7 +9,7 @@ export interface ParsedBoqLine {
   product: string;
   size: string;
   rating: string;
-  facing: string;
+  facing?: string;
   quantity: string;
   unit: string;
   cutLength?: string;
@@ -24,11 +24,39 @@ export function normalizeUnit(rawUnit: string): string {
   const u = (rawUnit || "").toLowerCase().trim();
   if (!u) return "pcs";
   if (/^(nos|no|pcs|pieces|units?|items?|ea|each|qty)$/i.test(u)) return "pcs";
-  if (/^(mtr|m|meter|meters|linear\s*m|r\.?m\.?)$/i.test(u)) return "mtr";
+  if (/^(mtr|m|meter|meters|linear\s*m|r\.?m\.?)$/i.test(u)) return "m";
   if (/^(kg|kgs|kilo|kilograms)$/i.test(u)) return "kg";
-  if (/^(mt|metric\s*ton|metric\s*tons|ton|tons|tonnes)$/i.test(u)) return "tons";
+  if (/^(mt|metric\s*ton|metric\s*tons|ton|tons|tonnes)$/i.test(u)) return "MT";
   if (/^(sets?|lot|pkg)$/i.test(u)) return "set";
-  return "pcs";
+  return u;
+}
+
+/**
+ * Parse a single CSV or TSV line respecting quotes and preserving empty columns
+ */
+export function parseCsvLine(text: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"' || char === "'") {
+      if (!inQuotes && cur.length === 0) {
+        inQuotes = true;
+      } else if (inQuotes && (i === text.length - 1 || text[i + 1] === "," || text[i + 1] === "\t")) {
+        inQuotes = false;
+      } else {
+        cur += char;
+      }
+    } else if ((char === "," || char === "\t") && !inQuotes) {
+      result.push(cur.trim());
+      cur = "";
+    } else {
+      cur += char;
+    }
+  }
+  result.push(cur.trim());
+  return result;
 }
 
 /**
@@ -45,7 +73,7 @@ export function parseDescriptionString(text: string): Partial<ParsedBoqLine> {
     res.unit = normalizeUnit(qtyMatch[2]);
   }
 
-  // 2. Size extraction (e.g. 4", 6", 1", 1/2", 3/4", 2.5", 100mm, or structural designation ISMB 300)
+  // 2. Structural designation or NPS size
   const structuralMatch = clean.match(/\b(ISMB|ISHB|UB|UC|HEA|HEB|MC)\s*(\d+)\b/i);
   const npsMatch = clean.match(/(?:^|[,\s\t])((?:\d+(?:\.\d+)?|\d+\/\d+)\s*(?:\"|inch|in\.?|nps|\bmm\b))(?:[,\s\t]|$)/i);
   if (structuralMatch && structuralMatch[1] && structuralMatch[2]) {
@@ -58,9 +86,7 @@ export function parseDescriptionString(text: string): Partial<ParsedBoqLine> {
   }
 
   // 3. Rating / Schedule extraction
-  // Class: #150, 150#, Class 150, 3000#, Class 3000
   const classMatch = clean.match(/(?:class|#)\s*(150|300|600|900|1500|2500|3000|6000|9000)\b|\b(150|300|600|900|1500|2500|3000|6000|9000)#/i);
-  // Schedule: SCH 40S, SCH 80, SCH STD, SCH XXS
   const schMatch = clean.match(/\b(?:SCH|SCHEDULE)\s*(\d+[A-Z]?|STD|XS|XXS)\b/i);
   if (classMatch) {
     const val = classMatch[1] || classMatch[2];
@@ -136,9 +162,9 @@ export function parseDescriptionString(text: string): Partial<ParsedBoqLine> {
     res.material = "Monel 400";
   } else if (/Super\s*Duplex\s*2507/i.test(clean) || /S32750/i.test(clean) || /S32760/i.test(clean) || /F53\b/i.test(clean)) {
     res.material = "Super Duplex 2507";
-  } else if (/Duplex\s*2205/i.test(clean) || /S32205/i.test(clean) || /S31803/i.test(clean) || /A790\s*S32205/i.test(clean) || /F51\b/i.test(clean)) {
+  } else if (/Duplex\s*2205/i.test(clean) || /S32205/i.test(clean) || /S31803/i.test(clean) || /A790\s*S32205/i.test(clean) || /A182\s*F51/i.test(clean) || /2205\b/i.test(clean)) {
     res.material = "Duplex 2205";
-  } else if (/A182\s*F316L/i.test(clean) || /A403\s*WP316L/i.test(clean) || /A312\s*TP316L/i.test(clean) || /316L\b/i.test(clean) || /SS\s*316L/i.test(clean)) {
+  } else if (/A182\s*F316L/i.test(clean) || /F316L\b/i.test(clean) || /A403\s*WP316L/i.test(clean) || /WP316L\b/i.test(clean) || /A312\s*TP316L/i.test(clean) || /316L\b/i.test(clean) || /SS\s*316L/i.test(clean)) {
     res.material = "SS 316L";
   } else if (/316\b/i.test(clean) || /SS\s*316\b/i.test(clean)) {
     res.material = "SS 316";
@@ -174,23 +200,10 @@ export function parseBoqTable(rawText: string): ParsedBoqLine[] {
   const rawRows = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!rawRows.length) return [];
 
-  // Determine delimiter (\t or ,)
   const firstRow = rawRows[0] || "";
-  const isTsv = firstRow.includes("\t");
-
-  const splitRow = (row: string): string[] => {
-    if (isTsv) {
-      return row.split("\t").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-    }
-    // CSV with quotes support
-    return (row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(",")).map((c) =>
-      c.trim().replace(/^["']|["']$/g, "")
-    );
-  };
-
-  const headerTokens = splitRow(firstRow).map((h) => h.toLowerCase());
+  const headerTokens = parseCsvLine(firstRow).map((h) => h.toLowerCase());
   const hasHeaderRow = headerTokens.some((h) =>
-    ["sr", "sl", "item", "description", "material", "grade", "product", "size", "nps", "class", "rating", "sch", "schedule", "qty", "quantity", "unit"].some((k) => h.includes(k))
+    ["sr", "sl", "item", "description", "material", "grade", "product", "size", "nps", "class", "rating", "sch", "schedule", "qty", "quantity", "unit", "uom"].some((k) => h.includes(k))
   );
 
   let colMap = {
@@ -223,80 +236,80 @@ export function parseBoqTable(rawText: string): ParsedBoqLine[] {
   const results: ParsedBoqLine[] = [];
 
   for (const row of dataRows) {
-    const cols = splitRow(row);
+    const cols = parseCsvLine(row);
     if (!cols.length || cols.every((c) => !c)) continue;
 
-    const getCol = (idx: number): string => (idx >= 0 && idx < cols.length && cols[idx] ? cols[idx] : "");
+    const getCol = (idx: number): string => (idx >= 0 && idx < cols.length && cols[idx] ? cols[idx].trim() : "");
 
-    // Single composite description column or free-text row
-    if (cols.length === 1 || (hasHeaderRow && colMap.desc !== -1 && getCol(colMap.desc) && colMap.material === -1)) {
+    // Single composite description column or free-text row without headers
+    if (cols.length === 1 || (!hasHeaderRow && cols.length === 1)) {
       const lineStr = (colMap.desc !== -1 ? getCol(colMap.desc) : cols[0]) || row;
       const parsed = parseDescriptionString(lineStr);
       results.push({
         material: parsed.material || "ASTM / ASME Alloy",
         product: parsed.product || "Piping Component",
-        size: parsed.size || getCol(colMap.size),
-        rating: parsed.rating || getCol(colMap.rating),
-        facing: parsed.facing || getCol(colMap.facing),
-        quantity: parsed.quantity || (colMap.qty !== -1 ? getCol(colMap.qty) : "1") || "1",
-        unit: parsed.unit || (colMap.unit !== -1 ? normalizeUnit(getCol(colMap.unit)) : "pcs") || "pcs",
+        size: parsed.size || "—",
+        rating: parsed.rating || "—",
+        facing: parsed.facing || "",
+        quantity: parsed.quantity || "1",
+        unit: parsed.unit || "pcs",
         processing: [],
         raw: row,
       });
       continue;
     }
 
-    // Multi-column mapping
-    let lineObj: ParsedBoqLine = {
-      material: "",
-      product: "",
-      size: "",
-      rating: "",
-      facing: "",
-      quantity: "",
-      unit: "pcs",
-      processing: [],
-      raw: row,
-    };
+    const descText = colMap.desc !== -1 ? getCol(colMap.desc) : "";
+    const parsedFromDesc = parseDescriptionString(descText || row);
 
-    if (hasHeaderRow) {
-      if (getCol(colMap.material)) lineObj.material = getCol(colMap.material);
-      if (getCol(colMap.product)) lineObj.product = getCol(colMap.product);
-      if (getCol(colMap.size)) lineObj.size = getCol(colMap.size);
-      if (getCol(colMap.rating)) lineObj.rating = getCol(colMap.rating);
-      if (getCol(colMap.facing)) lineObj.facing = getCol(colMap.facing);
-      if (getCol(colMap.qty)) lineObj.quantity = getCol(colMap.qty);
-      if (getCol(colMap.unit)) lineObj.unit = normalizeUnit(getCol(colMap.unit));
-    }
+    let rawSize = colMap.size !== -1 ? getCol(colMap.size) : "";
+    let rawRating = colMap.rating !== -1 ? getCol(colMap.rating) : "";
+    const rawQty = colMap.qty !== -1 ? getCol(colMap.qty) : "";
+    const rawUnit = colMap.unit !== -1 ? getCol(colMap.unit) : "";
 
-    // Fallback/enrich from full text if critical fields are blank
-    const enriched = parseDescriptionString(row);
-    lineObj.material = lineObj.material || enriched.material || "";
-    lineObj.product = lineObj.product || enriched.product || "";
-    lineObj.size = lineObj.size || enriched.size || "";
-    lineObj.rating = lineObj.rating || enriched.rating || "";
-    lineObj.facing = lineObj.facing || enriched.facing || "";
-    lineObj.quantity = lineObj.quantity || enriched.quantity || "1";
-    lineObj.unit = lineObj.unit && lineObj.unit !== "pcs" ? lineObj.unit : (enriched.unit || "pcs");
+    // Check if rawSize contains both size and schedule e.g. '4" SCH 40S' or '6" SCH 40S'
+    let finalSize = rawSize;
+    let finalRating = rawRating;
 
-    // If still blank, inspect columns by heuristics
-    if (!lineObj.material || !lineObj.product) {
-      for (let i = 0; i < cols.length; i++) {
-        if (i === colMap.sr) continue;
-        const c = cols[i];
-        if (!c) continue;
-        const sub = parseDescriptionString(c);
-        if (sub.material && !lineObj.material) lineObj.material = sub.material;
-        if (sub.product && !lineObj.product) lineObj.product = sub.product;
-        if (sub.size && !lineObj.size) lineObj.size = sub.size;
-        if (sub.rating && !lineObj.rating) lineObj.rating = sub.rating;
+    if (rawSize) {
+      const schInSize = rawSize.match(/(SCH\s*\d+[A-Z]?|SCH\s*STD|SCH\s*XS|SCH\s*XXS)/i);
+      if (schInSize) {
+        if (!finalRating) {
+          finalRating = schInSize[1].toUpperCase();
+        }
+        finalSize = rawSize.replace(schInSize[0], "").trim();
       }
     }
 
-    if (!lineObj.product) lineObj.product = "Piping Component";
-    if (!lineObj.material) lineObj.material = "ASTM / ASME Alloy";
+    // Normalize rating (e.g. '#150' -> 'Class 150', '3000#' stays '3000#')
+    if (finalRating) {
+      if (/^#\d+/.test(finalRating)) {
+        const num = finalRating.replace("#", "");
+        finalRating = Number(num) >= 2000 ? `${num}#` : `Class ${num}`;
+      } else if (/^\d+#$/.test(finalRating)) {
+        const num = finalRating.replace("#", "");
+        finalRating = Number(num) >= 2000 ? `${num}#` : `Class ${num}`;
+      }
+    }
 
-    results.push(lineObj);
+    const material = (colMap.material !== -1 ? getCol(colMap.material) : "") || parsedFromDesc.material || "ASTM / ASME Alloy";
+    const product = (colMap.product !== -1 ? getCol(colMap.product) : "") || parsedFromDesc.product || "Piping Component";
+    finalSize = finalSize || parsedFromDesc.size || "—";
+    finalRating = finalRating || parsedFromDesc.rating || "—";
+    const quantity = rawQty || parsedFromDesc.quantity || "1";
+    const unit = rawUnit ? normalizeUnit(rawUnit) : (parsedFromDesc.unit || "pcs");
+
+    results.push({
+      material,
+      product,
+      size: finalSize,
+      rating: finalRating,
+      facing: parsedFromDesc.facing || "",
+      quantity,
+      unit,
+      processing: [],
+      raw: row,
+    });
   }
 
   return results;

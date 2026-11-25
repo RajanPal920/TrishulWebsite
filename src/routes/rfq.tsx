@@ -364,7 +364,7 @@ function Rfq() {
     setBoqInputText("");
     setBoqParsedLines([]);
     setBoqFileName("");
-    if (boqParsedLines.length >= 4) {
+    if (boqParsedLines.length >= 7) {
       setViewMode("table");
     }
   };
@@ -387,15 +387,22 @@ function Rfq() {
       }
       picked.push(f);
     }
+    const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
     setFiles((prev) => {
       const merged = [...prev];
+      let currentTotal = merged.reduce((sum, item) => sum + item.size, 0);
       for (const f of picked) {
         if (merged.some((m) => m.name === f.name && m.size === f.size)) continue;
         if (merged.length >= MAX_FILES) {
           notes.push(`${f.name} — over the ${MAX_FILES} file limit`);
           continue;
         }
+        if (currentTotal + f.size > MAX_TOTAL_BYTES) {
+          notes.push(`${f.name} (${fmtSize(f.size)}) — exceeds total 40 MB inquiry limit`);
+          continue;
+        }
         merged.push(f);
+        currentTotal += f.size;
       }
       return merged;
     });
@@ -412,6 +419,16 @@ function Rfq() {
 
     setError(null);
     const form = new FormData(e.currentTarget);
+
+    // Spam trap honeypot validation
+    const spamCheck = String(form.get("company_website") ?? "").trim();
+    if (spamCheck) {
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        void navigate({ to: "/rfq/confirmation", search: { token: "spm-" + Date.now() } });
+      }, 500);
+      return;
+    }
 
     const rawEmail = String(form.get("email") ?? "").trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -993,6 +1010,17 @@ function Rfq() {
 
             <div className="scroll-reveal">
               <p className="eyebrow">4 — Your details</p>
+              {/* Spam-trap honeypot field - invisible to human users */}
+              <div className="hidden" aria-hidden="true" style={{ display: "none" }}>
+                <label htmlFor="company_website">Do not fill this field</label>
+                <input
+                  type="text"
+                  id="company_website"
+                  name="company_website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-2">
                   <span className="eyebrow">Company *</span>

@@ -3,7 +3,7 @@ import type { ProductType } from "./products.types";
 export const structuralProducts: ProductType[] = [
   {
     slug: "structural-beams",
-    name: "Structural Beams (I-Beams & H-Beams)",
+    name: "Structural Beams (ISMB, ISHB, UB, UC, HEA, HEB)",
     category: "structural",
     tagline: "Universal beams, universal columns, HEA, HEB and wide-flange shapes for load-bearing frameworks",
     summary:

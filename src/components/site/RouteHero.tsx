@@ -144,10 +144,22 @@ const staticHeroes: Record<string, HeroDetails> = {
     alt: "Order tracking and logistics dossier vault",
   },
   "/about": {
-    src: "/images/heroes/hero-landed-cost.jpg",
-    eyebrow: "INCOTERMS · FREIGHT · LANDED COST",
+    src: "/images/heroes/hero-processing.jpg",
+    eyebrow: "ABOUT TRISHUL",
     title: "About Trishul Metals & Alloys",
     alt: "Mumbai warehouse and global dispatch facility",
+  },
+  "/vendor-registration": {
+    src: "/images/heroes/hero-quality.jpg",
+    eyebrow: "PROCUREMENT & ERP ONBOARDING",
+    title: "Vendor Registration & Supplier Profile",
+    alt: "Vendor registration and supplier onboarding profile",
+  },
+  "/rfq/confirmation": {
+    src: "/images/heroes/hero-contact.jpg",
+    eyebrow: "ENQUIRY CONFIRMATION",
+    title: "Quotation Request Confirmed",
+    alt: "Quotation request confirmed",
   },
 };
 
@@ -232,9 +244,9 @@ export function RouteHero() {
           <p className="font-mono text-[11px] sm:text-xs uppercase tracking-[0.2em] text-primary font-semibold">
             {hero.eyebrow}
           </p>
-          <h1 className="text-sm sm:text-base lg:text-lg font-bold tracking-tight text-foreground">
+          <p className="text-sm sm:text-base lg:text-lg font-bold tracking-tight text-foreground">
             {hero.title}
-          </h1>
+          </p>
         </div>
       </div>
     </aside>

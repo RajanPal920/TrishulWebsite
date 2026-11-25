@@ -70,7 +70,22 @@ router.post('/rfq', async (req, res) => {
       line_items,
       lineItems,
       notes,
+      company_website,
+      hp_field,
     } = req.body;
+
+    // 0. Spam trap / honeypot check
+    if (company_website || hp_field) {
+      const dummyToken = crypto.randomUUID();
+      return res.status(200).json({ success: true, confirmationToken: dummyToken });
+    }
+
+    // 0b. Attachment size validation (max 40 MB total)
+    const MAX_TOTAL_ATTACHMENT_SIZE = 40 * 1024 * 1024;
+    const totalBytes = (attachments || []).reduce((acc, a) => acc + (a?.size || 0), 0);
+    if (totalBytes > MAX_TOTAL_ATTACHMENT_SIZE) {
+      return res.status(400).json({ error: 'Total attachment size exceeds the 40 MB limit.' });
+    }
 
     const name = (contact_name || contactName || req.user?.full_name || '').trim();
     const mail = (email || req.user?.email || '').trim().toLowerCase();

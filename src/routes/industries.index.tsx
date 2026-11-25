@@ -12,8 +12,8 @@ export const Route = createFileRoute("/industries/")({
         content:
           "Corrosion-Resistant Alloy (CRA) flanges and fittings for offshore, refinery, petrochemical, desalination, marine, power, pharma and fertiliser projects, matched to service conditions and to ASTM, ASME, NACE and applicable NORSOK M-630 requirements.",
       },
-      { property: "og:title", content: "Industries Served | Trishul Metals & Alloys" },
-      { property: "og:description", content: "Twenty industrial sectors with CRA grade and standards guidance." },
+      { property: "og:title", content: "Industries We Supply | Trishul Metals & Alloys" },
+      { property: "og:description", content: "26 industrial sectors with CRA grade and standards guidance." },
       { property: "og:url", content: "https://www.trishulmetal.com/industries" },
     ],
     links: [{ rel: "canonical", href: "https://www.trishulmetal.com/industries" }],
@@ -29,9 +29,9 @@ function IndustriesIndex() {
         <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Industries" }]} />
         <div className="mt-6">
           <SectionHead as="h1"
-            eyebrow="Applications"
-            title="Industries served"
-            intro="Service environment drives alloy selection. Each sector page sets out the corrosive conditions, preferred grades, product forms, standards and procurement checkpoints."
+            eyebrow="Industries we supply"
+            title="Industries we supply"
+            intro={`Service environment drives alloy selection. Across all ${industries.length} industrial sectors, each sector page sets out the corrosive conditions, preferred grades, product forms, standards and procurement checkpoints.`}
           />
         </div>
       </Section>

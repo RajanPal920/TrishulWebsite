@@ -97,9 +97,9 @@ const industriesMenu: NavGroup = {
     { to: "/industries/offshore-oil-and-gas", label: "Offshore oil & gas", desc: "Upstream, subsea & platform piping" },
     { to: "/industries/data-centres-and-liquid-cooling", label: "Data centres & cooling", desc: "Direct-to-chip & immersion manifolds" },
     { to: "/industries/green-hydrogen", label: "Green hydrogen & ammonia", desc: "High-pressure H₂ embrittlement resistance" },
-    { to: "/industries/power-generation", label: "Power generation", desc: "ASME Section III safety class piping" },
+    { to: "/industries/power-generation", label: "Power generation", desc: "Thermal, combined cycle & energy piping" },
     { to: "/industries/chemical-processing", label: "Chemical & petrochemical", desc: "Corrosive acid & high-temp service" },
-    { to: "/industries/marine-and-shipbuilding", label: "Marine & naval defence", desc: "Seawater piping, Cu-Ni & duplex" },
+    { to: "/industries/marine-and-shipbuilding", label: "Marine & shipbuilding", desc: "Seawater cooling, ballast & hull piping" },
   ],
 };
 

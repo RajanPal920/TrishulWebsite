@@ -26,19 +26,37 @@ import { AuthModal } from "@/components/site/AuthModal";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+    <div className="flex min-h-[70vh] items-center justify-center bg-background px-4 py-16">
+      <div className="max-w-lg text-center">
+        <p className="font-mono text-sm uppercase tracking-widest text-primary font-semibold">Error 404</p>
+        <h1 className="mt-3 text-4xl sm:text-5xl font-bold text-foreground">Page not found</h1>
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+          The page you are looking for does not exist or may have been relocated. You can navigate through our verified catalogue or reach out directly.
         </p>
-        <div className="mt-6">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/industries"
+            className="inline-flex items-center justify-center rounded-sm bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+          >
+            Industries we supply
+          </Link>
+          <Link
+            to="/products"
+            className="inline-flex items-center justify-center rounded-sm border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground transition-colors hover:border-primary/50"
+          >
+            Product catalogue
+          </Link>
+          <Link
+            to="/rfq"
+            className="inline-flex items-center justify-center rounded-sm border border-primary/40 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            Request for quotation
+          </Link>
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-sm bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center rounded-sm border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Go home
+            Go home →
           </Link>
         </div>
       </div>
@@ -49,14 +67,26 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error("[Root Error Component]:", error);
   const router = useRouter();
+  const errorMessage = error instanceof Error ? error.message : String(error || "Unknown error");
+  const errorStack = error instanceof Error ? error.stack : undefined;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
+      <div className="max-w-lg text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">This page didn't load</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {errorMessage && errorMessage !== "Unknown error" && (
+          <div className="mt-4 max-h-48 overflow-auto rounded bg-destructive/10 p-3 text-left font-mono text-xs text-destructive border border-destructive/20">
+            <p className="font-semibold text-xs">{errorMessage}</p>
+            {errorStack && (
+              <pre className="mt-1 text-[10px] text-destructive/80 whitespace-pre-wrap font-mono">
+                {errorStack}
+              </pre>
+            )}
+          </div>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -116,8 +146,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "@type": "Organization",
           name: company.name,
           url: company.siteUrl,
-          email: company.email,
+          email: "export@trishulmetal.com",
           telephone: company.phone,
+          parentOrganization: {
+            "@type": "Organization",
+            name: "Modi Group of Industries",
+          },
+          founder: {
+            "@type": "Person",
+            name: "Ramesh Modi",
+            jobTitle: "Group Founder & Principal",
+          },
           address: offices.map((o) => ({
             "@type": "PostalAddress",
             streetAddress: o.address.street,
@@ -179,7 +218,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
             },
             {
               "@type": "EducationalOccupationalCredential",
-              name: "CIFFA — International Freight Forwarding",
+              name: "CIFFA — International Freight Forwarding (Govind Modi Personal Training)",
               credentialCategory: "certification",
               recognizedBy: {
                 "@type": "Organization",
