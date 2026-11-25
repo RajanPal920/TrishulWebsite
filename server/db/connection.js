@@ -268,6 +268,21 @@ function normalizeParamsForMySQL(params) {
   });
 }
 
+function isFatalConnectionError(err) {
+  if (!err) return false;
+  const code = err.code || '';
+  return (
+    code === 'ECONNREFUSED' ||
+    code === 'PROTOCOL_CONNECTION_LOST' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND' ||
+    code === 'ER_ACCESS_DENIED_ERROR' ||
+    code === 'HANDSHAKE_ERROR' ||
+    code === 'EHOSTUNREACH' ||
+    Boolean(err.message?.includes('Connection lost') || err.message?.includes('timeout') || err.message?.includes('closed'))
+  );
+}
+
 /**
  * Execute a query that returns multiple rows
  */
@@ -280,9 +295,12 @@ export async function all(sql, params = []) {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
       return rows;
     } catch (err) {
-      console.warn(`[DB Notice] MySQL query error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
-      activeEngine = 'sqlite';
-      return all(sql, params);
+      if (isFatalConnectionError(err)) {
+        console.warn(`[DB Notice] MySQL connection lost (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+        activeEngine = 'sqlite';
+        return all(sql, params);
+      }
+      throw err;
     }
   }
 
@@ -329,9 +347,12 @@ export async function get(sql, params = []) {
       const [rows] = await mysqlPool.query(sql, normalizeParamsForMySQL(params));
       return rows && rows.length > 0 ? rows[0] : null;
     } catch (err) {
-      console.warn(`[DB Notice] MySQL get error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
-      activeEngine = 'sqlite';
-      return get(sql, params);
+      if (isFatalConnectionError(err)) {
+        console.warn(`[DB Notice] MySQL connection lost (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+        activeEngine = 'sqlite';
+        return get(sql, params);
+      }
+      throw err;
     }
   }
 
@@ -391,9 +412,12 @@ export async function run(sql, params = []) {
         affectedRows: result.affectedRows,
       };
     } catch (err) {
-      console.warn(`[DB Notice] MySQL run error (${err.code || err.message}). Seamlessly falling back to SQLite.`);
-      activeEngine = 'sqlite';
-      return run(sql, params);
+      if (isFatalConnectionError(err)) {
+        console.warn(`[DB Notice] MySQL connection lost (${err.code || err.message}). Seamlessly falling back to SQLite.`);
+        activeEngine = 'sqlite';
+        return run(sql, params);
+      }
+      throw err;
     }
   }
 

@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { Section, SectionHead, Breadcrumbs, BulletList } from "@/components/site/parts";
 import { company, offices } from "@/data/company";
+import { Send, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -64,18 +66,29 @@ function Contact() {
             </div>
           </dl>
         </div>
-        <div className="surface-panel rounded-md p-6">
-          <p className="eyebrow">Include with your enquiry</p>
-          <div className="mt-4">
-            <BulletList
-              items={[
-                "Grade and UNS number, or the service conditions if unspecified",
-                "Product type, size range, schedule or thickness",
-                "Pressure class, facing and bore requirements",
-                "Governing standards and any project specification numbers",
-                "Test and certification scope, quantity and delivery terms",
-              ]}
-            />
+        <div className="surface-panel rounded-md p-6 space-y-6">
+          <div>
+            <h3 className="font-display text-base font-semibold text-foreground">Send an Enquiry to the Technical Desk</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Direct connection to our Mumbai metallurgical engineers and export pricing desk.
+            </p>
+          </div>
+
+          <ContactForm />
+
+          <div className="border-t border-border/80 pt-4">
+            <p className="eyebrow">Include with your enquiry</p>
+            <div className="mt-3">
+              <BulletList
+                items={[
+                  "Grade and UNS number, or the service conditions if unspecified",
+                  "Product type, size range, schedule or thickness",
+                  "Pressure class, facing and bore requirements",
+                  "Governing standards and any project specification numbers",
+                  "Test and certification scope, quantity and delivery terms",
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -226,5 +239,192 @@ function Contact() {
         </div>
       </div>
     </Section>
+  );
+}
+
+function ContactForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!name.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Please provide a valid email address.");
+      return;
+    }
+    if (!message.trim()) {
+      setError("Please include your inquiry details or component specification.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          company: companyName.trim() || undefined,
+          message: message.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit enquiry. Please try again.");
+      }
+
+      setSuccess(true);
+      setName("");
+      setEmail("");
+      setPhone("");
+      setCompanyName("");
+      setMessage("");
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please reach out via email or phone directly.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="rounded-md border border-primary/40 bg-primary/10 p-5 space-y-2">
+        <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+          <CheckCircle2 className="h-5 w-5" />
+          <span>Enquiry Received Successfully</span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Thank you. Your message has been routed to our Mumbai metallurgical engineers and export desk. A technical specialist will review your specification and follow up promptly.
+        </p>
+        <button
+          type="button"
+          onClick={() => setSuccess(false)}
+          className="mt-2 text-xs font-semibold text-primary underline"
+        >
+          Send another enquiry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3.5">
+      {error && (
+        <div className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Name <span className="text-primary">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. John Doe"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Work Email <span className="text-primary">*</span>
+          </label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g. buyer@company.com"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Phone / Mobile
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="e.g. +91 98200 12345"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Company Name
+          </label>
+          <input
+            type="text"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="e.g. Petro Engineering Ltd"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+          Inquiry / Material Details <span className="text-primary">*</span>
+        </label>
+        <textarea
+          required
+          rows={4}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Please describe the grade, product types, size, schedule/class, quantity, and certification scope (e.g. Inconel 625 flanges Class 300 to ASME B16.5 with 3.1 MTC)..."
+          disabled={isSubmitting}
+          className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none resize-none"
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full inline-flex items-center justify-center gap-2 rounded bg-primary py-2.5 px-4 text-xs font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Sending Enquiry...</span>
+          </>
+        ) : (
+          <>
+            <Send className="h-4 w-4" />
+            <span>Submit Technical Enquiry</span>
+          </>
+        )}
+      </button>
+    </form>
   );
 }

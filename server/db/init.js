@@ -107,18 +107,25 @@ export async function initDatabase() {
 
   // Safe schema migration for last_login_at, role, login_method, and status across both engines
   const migrations = [
-    'ALTER TABLE users ADD COLUMN last_login_at TEXT',
-    "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'",
-    "ALTER TABLE users ADD COLUMN login_method TEXT DEFAULT 'password'",
-    "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
-    'ALTER TABLE product_requests ADD COLUMN quotation_amount REAL',
-    'ALTER TABLE material_requests ADD COLUMN quotation_amount REAL',
-    'ALTER TABLE rfq_requests ADD COLUMN admin_response TEXT',
-    'ALTER TABLE rfq_requests ADD COLUMN admin_notes TEXT',
+    { table: 'users', col: 'last_login_at', def: 'TEXT' },
+    { table: 'users', col: 'role', def: "TEXT DEFAULT 'customer'" },
+    { table: 'users', col: 'login_method', def: "TEXT DEFAULT 'password'" },
+    { table: 'users', col: 'status', def: "TEXT DEFAULT 'active'" },
+    { table: 'product_requests', col: 'quotation_amount', def: 'REAL' },
+    { table: 'material_requests', col: 'quotation_amount', def: 'REAL' },
+    { table: 'rfq_requests', col: 'admin_response', def: 'TEXT' },
+    { table: 'rfq_requests', col: 'admin_notes', def: 'TEXT' },
   ];
   for (const m of migrations) {
     try {
-      await run(m);
+      if (engine === 'mysql') {
+        const existing = await all(`SHOW COLUMNS FROM ${m.table} LIKE ?`, [m.col]);
+        if (!existing || existing.length === 0) {
+          await run(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`);
+        }
+      } else {
+        await run(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`);
+      }
     } catch {
       // Column already exists, safe to ignore
     }
@@ -198,6 +205,21 @@ export async function initDatabase() {
         message TEXT NULL,
         is_internal BOOLEAN NOT NULL DEFAULT 0,
         email_sent BOOLEAN NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS vendor_registrations (
+        id VARCHAR(64) PRIMARY KEY,
+        company_name VARCHAR(255) NOT NULL,
+        contact_person VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) NULL,
+        country VARCHAR(100) NULL,
+        product_categories TEXT NULL,
+        certifications TEXT NULL,
+        message TEXT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'Pending Review',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);

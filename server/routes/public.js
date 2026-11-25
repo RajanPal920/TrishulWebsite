@@ -70,6 +70,7 @@ router.post('/rfq', async (req, res) => {
       line_items,
       lineItems,
       notes,
+      attachments = [],
       company_website,
       hp_field,
     } = req.body;
@@ -348,6 +349,204 @@ router.post('/document-download', async (req, res) => {
   } catch (err) {
     console.error('[Document Download Error]:', err);
     return res.status(500).json({ error: 'Failed to record document download.' });
+  }
+});
+
+/**
+ * POST /api/contact & POST /api/enquiries
+ * General enquiry and contact desk submission
+ */
+const handleContactSubmission = async (req, res) => {
+  try {
+    const { name, contact_name, email, phone, company, subject, message, notes, hp_field } = req.body;
+    if (hp_field) {
+      return res.status(200).json({ success: true, message: 'Message received.' });
+    }
+
+    const senderName = (name || contact_name || req.user?.full_name || 'Customer').trim();
+    const senderEmail = (email || req.user?.email || '').trim().toLowerCase();
+    const senderPhone = (phone || req.user?.phone || '').trim();
+    const senderCompany = (company || req.user?.company || '').trim();
+    const senderMessage = (message || notes || '').trim();
+    const senderSubject = (subject || 'General Inquiry').trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!senderEmail || !emailRegex.test(senderEmail)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+    if (!senderMessage) {
+      return res.status(400).json({ error: 'Please enter a message or inquiry details.' });
+    }
+
+    const inqId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    let userId = req.user?.id || null;
+
+    if (!userId && senderEmail) {
+      try {
+        const u = await get('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [senderEmail]);
+        if (u?.id) userId = u.id;
+      } catch {}
+    }
+
+    // Save into inquiries table if user exists
+    if (userId) {
+      await run(
+        `INSERT INTO inquiries (id, user_id, subject, message, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'Open', ?, ?)`,
+        [inqId, userId, senderSubject, senderMessage, now, now]
+      ).catch(() => {});
+    }
+
+    // Record activity history
+    const histId = crypto.randomUUID();
+    await run(
+      `INSERT INTO request_activity_history (id, request_id, actor_type, actor_id, actor_name, action, old_status, new_status, message, is_internal, email_sent, created_at)
+       VALUES (?, ?, 'customer', ?, ?, 'CONTACT_ENQUIRY', NULL, 'Open', ?, 0, 1, ?)`,
+      [histId, inqId, userId, senderName, `Enquiry: ${senderSubject} - ${senderMessage.slice(0, 150)}`, now]
+    ).catch(() => {});
+
+    // Notify export desk
+    dispatchEmailNotification({
+      type: 'General Contact Enquiry',
+      reference: inqId.slice(0, 8).toUpperCase(),
+      customerName: senderName,
+      email: senderEmail,
+      company: senderCompany,
+      phone: senderPhone,
+      summary: `${senderSubject}: ${senderMessage}`,
+    }).catch(() => {});
+
+    return res.status(201).json({
+      success: true,
+      message: 'Your inquiry has been received. Our technical sales desk will respond shortly.',
+      inquiryId: inqId,
+    });
+  } catch (err) {
+    console.error('[Contact Submission Error]:', err);
+    return res.status(500).json({ error: 'Failed to process inquiry. Please try again.' });
+  }
+};
+
+router.post('/contact', handleContactSubmission);
+router.post('/enquiries', handleContactSubmission);
+
+/**
+ * POST /api/vendors & POST /api/vendor-registration
+ * Supplier & vendor onboarding submission
+ */
+const handleVendorSubmission = async (req, res) => {
+  try {
+    const {
+      company_name,
+      companyName,
+      contact_person,
+      contactPerson,
+      name,
+      email,
+      phone,
+      country,
+      product_categories,
+      productCategories,
+      certifications,
+      message,
+      notes,
+    } = req.body;
+
+    const comp = (company_name || companyName || '').trim();
+    const contact = (contact_person || contactPerson || name || '').trim();
+    const mail = (email || '').trim().toLowerCase();
+    const ph = (phone || '').trim();
+    const cntry = (country || 'India').trim();
+    const cats = Array.isArray(product_categories || productCategories)
+      ? (product_categories || productCategories).join(', ')
+      : String(product_categories || productCategories || '');
+    const certs = Array.isArray(certifications)
+      ? certifications.join(', ')
+      : String(certifications || '');
+    const msg = (message || notes || '').trim();
+
+    if (!comp) {
+      return res.status(400).json({ error: 'Company name is required.' });
+    }
+    if (!contact) {
+      return res.status(400).json({ error: 'Contact person name is required.' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!mail || !emailRegex.test(mail)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await run(
+      `INSERT INTO vendor_registrations (id, company_name, contact_person, email, phone, country, product_categories, certifications, message, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', ?)`,
+      [id, comp, contact, mail, ph || null, cntry || null, cats || null, certs || null, msg || null, now]
+    );
+
+    // Notify procurement desk
+    dispatchEmailNotification({
+      type: 'Vendor Supplier Registration',
+      reference: `VND-${id.slice(0, 8).toUpperCase()}`,
+      customerName: contact,
+      email: mail,
+      company: comp,
+      phone: ph,
+      summary: `Categories: ${cats || '—'}, Certifications: ${certs || '—'}`,
+    }).catch(() => {});
+
+    return res.status(201).json({
+      success: true,
+      message: 'Vendor onboarding details submitted successfully. Our procurement team will review your profile.',
+      vendorId: id,
+    });
+  } catch (err) {
+    console.error('[Vendor Registration Error]:', err);
+    return res.status(500).json({ error: 'Failed to submit vendor registration.' });
+  }
+};
+
+router.post('/vendors', handleVendorSubmission);
+router.post('/vendor-registration', handleVendorSubmission);
+
+/**
+ * POST /api/boq/parse
+ * Parse raw tabular MTO / BOQ CSV or text input into structured lines
+ */
+router.post('/boq/parse', (req, res) => {
+  try {
+    const { text, content } = req.body;
+    const raw = String(text || content || '').trim();
+    if (!raw) {
+      return res.status(400).json({ error: 'No content provided for parsing.' });
+    }
+
+    const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const parsed = [];
+
+    for (const line of lines) {
+      const parts = line.split(/[,\t;|]+/).map((p) => p.trim());
+      if (parts.length >= 2) {
+        parsed.push({
+          material: parts[0] || 'Inconel 625',
+          product: parts[1] || 'Weld Neck Flanges',
+          size: parts[2] || '',
+          rating: parts[3] || '',
+          quantity: parseInt(parts[4], 10) || 1,
+          unit: parts[5] || 'pcs',
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      count: parsed.length,
+      lines: parsed,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to parse BOQ input.' });
   }
 });
 

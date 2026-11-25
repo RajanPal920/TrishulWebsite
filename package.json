@@ -4,7 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js dev",
     "server": "node server/index.js",
     "db:init": "node server/db/init.js",
     "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --mode production",

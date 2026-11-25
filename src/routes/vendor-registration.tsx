@@ -16,6 +16,10 @@ import {
   Phone,
   Eye,
   ExternalLink,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/vendor-registration")({
@@ -371,11 +375,262 @@ Bank Remittance Notice: Bank details are issued on company letterhead with the p
         </div>
       </Section>
 
+      {/* Supplier & Mill Enrolment Application Form */}
+      <Section className="border-b border-border bg-card/40">
+        <div className="max-w-3xl mx-auto">
+          <SectionHead
+            eyebrow="Supplier &amp; Mill Onboarding"
+            title="Register as an Approved Trishul Metals Vendor"
+            intro="Mills, forging units, testing laboratories, and pipe manufacturers supplying nickel alloys, duplex, titanium, and specialized CRA components may apply for vendor code enrolment."
+          />
+          <div className="mt-8 surface-panel rounded-md p-6 border border-border">
+            <SupplierRegistrationForm />
+          </div>
+        </div>
+      </Section>
+
       {/* CTA */}
       <CtaBand
         title="Require customized vendor questionnaires, bank references, or NDA signing?"
         body="Send your vendor onboarding portal invite or questionnaire to our compliance desk for same-day completion."
       />
     </>
+  );
+}
+
+function SupplierRegistrationForm() {
+  const [companyName, setCompanyName] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("India");
+  const [categories, setCategories] = useState("");
+  const [certifications, setCertifications] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!companyName.trim()) {
+      setError("Company / Mill name is required.");
+      return;
+    }
+    if (!contactPerson.trim()) {
+      setError("Contact person name is required.");
+      return;
+    }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Please provide a valid work email address.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: companyName.trim(),
+          contact_person: contactPerson.trim(),
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          country: country.trim() || undefined,
+          product_categories: categories.trim() ? categories.split(",").map((c) => c.trim()) : undefined,
+          certifications: certifications.trim() ? certifications.split(",").map((c) => c.trim()) : undefined,
+          message: message.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit vendor registration.");
+      }
+
+      setSuccess(true);
+      setCompanyName("");
+      setContactPerson("");
+      setEmail("");
+      setPhone("");
+      setCategories("");
+      setCertifications("");
+      setMessage("");
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit vendor profile. Please reach out to procurement directly.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="rounded-md border border-primary/40 bg-primary/10 p-5 space-y-2">
+        <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+          <CheckCircle2 className="h-5 w-5" />
+          <span>Vendor Application Submitted Successfully</span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Thank you for applying to Trishul Metals &amp; Alloys approved vendor panel. Our QA &amp; procurement division will evaluate your certifications and product scope and reach out regarding audit requirements and formal vendor code issuance.
+        </p>
+        <button
+          type="button"
+          onClick={() => setSuccess(false)}
+          className="mt-2 text-xs font-semibold text-primary underline"
+        >
+          Submit another profile
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Company / Mill Name <span className="text-primary">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="e.g. Bharat Heavy Forgings Ltd"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Contact Person <span className="text-primary">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={contactPerson}
+            onChange={(e) => setContactPerson(e.target.value)}
+            placeholder="e.g. Rajesh Sharma (Head of Marketing)"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Work Email <span className="text-primary">*</span>
+          </label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g. sales@millcompany.com"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Phone / Mobile
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="e.g. +91 98200 12345"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Country / Region
+          </label>
+          <input
+            type="text"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder="e.g. India, Germany, UAE"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Product Categories Manufactured
+          </label>
+          <input
+            type="text"
+            value={categories}
+            onChange={(e) => setCategories(e.target.value)}
+            placeholder="e.g. Forged Flanges, Buttweld Fittings, Seamless Pipes"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            Quality Approvals &amp; Certifications
+          </label>
+          <input
+            type="text"
+            value={certifications}
+            onChange={(e) => setCertifications(e.target.value)}
+            placeholder="e.g. ISO 9001, PED 2014/68/EU, NORSOK M-650, IBR"
+            disabled={isSubmitting}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+          Manufacturing Capacity &amp; Mill Notes
+        </label>
+        <textarea
+          rows={3}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Please describe your plant capacities, testing laboratory facilities (PMI, UT, RT, Charpy Impact), and major approved end-user lists..."
+          disabled={isSubmitting}
+          className="w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none resize-none"
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded bg-primary py-2.5 px-6 text-xs font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Submitting Vendor Profile...</span>
+          </>
+        ) : (
+          <>
+            <Send className="h-4 w-4" />
+            <span>Submit Vendor Onboarding Profile</span>
+          </>
+        )}
+      </button>
+    </form>
   );
 }
