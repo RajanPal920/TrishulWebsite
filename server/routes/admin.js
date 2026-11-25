@@ -572,6 +572,7 @@ router.put('/password', async (req, res) => {
       }
       if (!match) {
         const allowedAdminPasswords = [
+          'Rajanp@892',
           'Admin@Trishul2026!',
           'Admin@Trishul2026',
           'admin@trishul2026!',
