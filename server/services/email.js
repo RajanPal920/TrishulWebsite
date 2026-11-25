@@ -6,7 +6,7 @@ let cachedTransporter = null;
 
 /**
  * Masks an email address for safe display in logs without leaking sensitive customer identity
- * e.g. rajanp9209022@gmail.com -> r***********2@gmail.com
+ * e.g. customer@example.com -> c******r@example.com
  */
 export function maskEmail(email) {
   if (!email || typeof email !== 'string') return '[empty]';
